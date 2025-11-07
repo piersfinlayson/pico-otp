@@ -4,9 +4,11 @@ on:
   workflow_dispatch:
   push:
     paths:
+      - '**'
       - '!README.md'
       - '!LICENSE*'
       - '!NOTICE*'
+      - '!docs/**'
   pull_request:
     branches: [ "main" ]
 
