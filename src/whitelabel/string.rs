@@ -102,7 +102,8 @@ impl OtpString {
         let high_byte = (old_offset as u16) << 8;
 
         // Update data_offset to point to the next free row after this string
-        *offset = old_offset.strict_add(self.otp_row_count() as u8);
+        *offset = old_offset.checked_add(self.otp_row_count() as u8)
+            .expect("internal error - offset overflow");
 
         low_byte | high_byte
     }

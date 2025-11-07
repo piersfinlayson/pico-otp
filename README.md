@@ -14,7 +14,7 @@ Raspberry Pi's [picotool](https://github.com/raspberrypi/picotool) can be used t
 
 `pico-otp's` primary purpose is to provide a programmatic API and library for working with this data, including generating the required OTP row data from JSON files, and converting OTP row data from real devices back into JSON format.
 
-`pico-otp` is used by [`pico⚡flash`](https://github.com/raspberrypi/pico-flash), which provides an accessbile web interface for white labelling and also erasing, reading and writing RP2350-based devices.
+`pico-otp` is used by [`pico⚡flash`](https://picoflash.org), which provides an accessbile web interface for white labelling and also erasing, reading and writing RP2350-based devices.
 
 In addition, it useful to have a well commented and thoroughly tested parallel implemenation of the white labelling logic, to help understand and verify the behaviour of picotool and the RP2350, as some of Raspberry Pi's documentation on this topic was found to be incomplete or unclear.
 
