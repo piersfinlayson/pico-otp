@@ -33,4 +33,7 @@ jobs:
     - name: Build binary
       run: cargo build --bin pico-otp --verbose
     - name: Run binary
-      run: cargo run --bin pico-otp -- json/sample-wl.json
+      run: |
+        cargo run --bin pico-otp -- -j json/sample-wl.json
+        cargo run --bin pico-otp -- -j json/sample-wl.json -o /tmp/otp.bin
+        cargo run --bin pico-otp -- -d /tmp/otp.bin -b 0x40FF77
