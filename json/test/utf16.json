@@ -1,0 +1,8 @@
+{
+    "$schema": "https://raw.githubusercontent.com/raspberrypi/picotool/develop/json/schemas/whitelabel-schema.json",
+    "device": {
+        "manufacturer": "😀piers.rocks",
+        "product": "pico⚡otp",
+        "serial_number": "1234abcd号"
+    }
+}

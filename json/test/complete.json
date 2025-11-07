@@ -1,0 +1,26 @@
+{
+    "$schema": "https://raw.githubusercontent.com/raspberrypi/picotool/develop/json/schemas/whitelabel-schema.json",
+    "device": {
+        "vid": "0x1234",
+        "pid": "0x4678",
+        "bcd": 1.00,
+        "lang_id": "0x0409",
+        "manufacturer": "piers.rocks",
+        "product": "pico-otp",
+        "serial_number": "1234abcd",
+        "max_power": "0xfa",
+        "attributes": "0x80"
+    },
+    "scsi": {
+        "vendor": "piersrks",
+        "product": "pico-otp",
+        "version": "v123"
+    },
+    "volume": {
+        "label": "PIERS.ROCKS",
+        "redirect_url": "https://piers.rocks/",
+        "redirect_name": "piers.rocks",
+        "model": "pico-otp",
+        "board_id": "pico-otp board id"
+    }
+}

@@ -1,0 +1,7 @@
+{
+    "$schema": "https://raw.githubusercontent.com/raspberrypi/picotool/develop/json/schemas/whitelabel-schema.json",
+    "device": {
+        "max_power": 250,
+        "attributes": 128
+    }
+}
