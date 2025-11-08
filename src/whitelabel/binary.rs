@@ -9,12 +9,10 @@ use alloc::vec::Vec;
 
 use crate::WhiteLabelStruct;
 use crate::whitelabel::Error;
+use crate::whitelabel::top::{TOTAL_OTP_ROWS, WHITE_LABEL_ADDR_VALID_BIT_NUM};
 use crate::whitelabel::{
     OTP_ROW_UNRESERVED_END, OTP_ROW_UNRESERVED_START, OTP_ROW_USB_BOOT_FLAGS,
     OTP_ROW_USB_BOOT_FLAGS_R1, OTP_ROW_USB_BOOT_FLAGS_R2, OTP_ROW_USB_WHITE_LABEL_DATA,
-};
-use crate::whitelabel::top::{
-    TOTAL_OTP_ROWS, WHITE_LABEL_ADDR_VALID_BIT_NUM,
 };
 
 // We assume a minimum of 256 rows (4 pages) being available for white label
@@ -81,7 +79,7 @@ impl TryFrom<&WhiteLabelStruct> for OtpData {
 
 impl OtpData {
     /// Creates a new OtpData object.
-    /// 
+    ///
     /// This is provided for convenience, but you may prefer to use one of
     /// [`from_json`](`Self::from_json`),
     /// [`from_full_otp_data`](`Self::from_full_otp_data`) or
@@ -119,8 +117,7 @@ impl OtpData {
 
     /// Returns a JSON representation of this OTP data.
     pub fn to_json(&self) -> Result<serde_json::Value, Error> {
-        WhiteLabelStruct::try_from(self)?
-            .to_json()
+        WhiteLabelStruct::try_from(self)?.to_json()
     }
 
     /// Creates an OtpData object from a complete OTP dump, consisting of both

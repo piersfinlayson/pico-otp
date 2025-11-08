@@ -9,7 +9,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use crate::whitelabel::Error;
-use crate::whitelabel::fields::{Field, NUM_FIELDS, MAX_STRING_LENGTH};
+use crate::whitelabel::fields::{Field, MAX_STRING_LENGTH, NUM_FIELDS};
 
 /// Represents a string to be stored in OTP, using the STRDEF encoding defined
 /// in the RP2350 datasheet at OTP_DATA:USB_WHITE_LABEL_ADDR Register, section

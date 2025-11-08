@@ -67,7 +67,7 @@ fn process_otp_dump(args: &Args) -> i32 {
         Ok(od) => {
             println!("Parsed OTP dump successfully");
             od
-        },
+        }
         Err(e) => {
             eprintln!("Failed to parse OTP dump: {e}");
             return 1;

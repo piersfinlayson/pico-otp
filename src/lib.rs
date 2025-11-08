@@ -12,7 +12,7 @@
 //! information, and volume labels. It supports whitelabel configurations
 //! defined in JSON format, allowing for easy customization of device
 //! parameters.
-//! 
+//!
 //! The [`picoboot`](https://docs.rs/picoboot) crate can be used to write the
 //! generated OTP data to the device, and retrieve OTP data from a device for
 //! parsing by this crate, using a USB connection to the RP2350 based device in
@@ -26,7 +26,7 @@
 //!
 //! It is used by [`pico⚡flash`](https://picoflash.org) to apply whitelabelling
 //! configurations to Raspberry Pi Pico 2 and other RP2350 devices.
-//! 
+//!
 //! # Features
 //!
 //! - Generate OTP binary data from whitelabel JSON configurations.
@@ -34,9 +34,9 @@
 //!   information.
 //! - Supports `picotool` whitelabel schema.
 //! - `no_std` compatible (requires `alloc`).
-//! 
+//!
 //! # Example - JSON fragment to OTP data
-//! 
+//!
 //! ```rust
 //! use pico_otp::OtpData;
 //!
@@ -71,7 +71,7 @@
 //! //   USB_BOOT_FLAGS_R1 and USB_BOOT_FLAGS_R2 respectively to enable this
 //! //   whitelabel data.  You must write this as non-ECC (raw) data.
 //! ```
-//! 
+//!
 //! # Example - JSON file to OTP data
 //!
 //! ```rust
@@ -95,12 +95,12 @@
 //!
 //! // Now write these to OTP memory on the RP2350.
 //! ```
-//! 
+//!
 //! # Example - Rust code to OTP data
-//! 
+//!
 //! ```rust
 //! use pico_otp::{WhiteLabelStruct, OtpData};
-//! 
+//!
 //! // Create the WhiteLabelStruct, customizing every possible value,
 //! // including Unicode strings for those that support it.
 //! # fn main() -> Result<(), pico_otp::WhiteLabelError> {
@@ -123,13 +123,13 @@
 //!
 //! // Generate the OTP data from it
 //! let otp_data = wls.to_otp_data_strict()?;
-//! 
+//!
 //! // Get the USB boot flags and ECC rows as LE bytes
 //! let usb_boot_flags = otp_data.usb_boot_flags();
 //! let ecc_rows = otp_data.to_le_ecc_bytes();
 //! #   Ok(())
 //! # }
-//! 
+//!
 //! // Now write these to OTP memory on the RP2350.
 //! ```
 
@@ -176,7 +176,12 @@ mod tests {
         assert!(od.is_ok());
     }
 
-    fn test_string(field: &str, good: bool, to_string_failure: bool, value: &str) -> Result<(), WhiteLabelError> {
+    fn test_string(
+        field: &str,
+        good: bool,
+        to_string_failure: bool,
+        value: &str,
+    ) -> Result<(), WhiteLabelError> {
         let mut wls = WhiteLabelStruct::default();
 
         // We have to handle the set_xxx() call failing if the string is > 127
@@ -200,14 +205,14 @@ mod tests {
                     panic!("Expected failure setting field '{field}' with value '{value}'");
                 }
                 ()
-            },
+            }
             Err(e) => {
                 if to_string_failure {
-                    return Ok(())
+                    return Ok(());
                 } else {
                     panic!("Unexpected failure setting field '{field}': {e}");
                 }
-            },
+            }
         }
         if good {
             assert!(wls.is_clean());
@@ -240,46 +245,23 @@ mod tests {
         Ok(())
     }
 
-    fn do_string_test(
-        field: &str,
-        unicode: bool,
-        max_len: usize,
-    ) {
-        let res = test_string(field, unicode, false,  "😀");
+    fn do_string_test(field: &str, unicode: bool, max_len: usize) {
+        let res = test_string(field, unicode, false, "😀");
         assert!(res.is_ok());
-        let res = test_string(field, unicode, false,  "号");
+        let res = test_string(field, unicode, false, "号");
         assert!(res.is_ok());
-        let res = test_string(
-            field,
-            true,
-            false,
-            &"a".repeat(max_len),
-        );
+        let res = test_string(field, true, false, &"a".repeat(max_len));
         assert!(res.is_ok());
 
         // Empty string creates a warning
-        let res = test_string(
-            field,
-            false,
-            false,
-            "",
-        );
+        let res = test_string(field, false, false, "");
         assert!(res.is_ok());
 
         // A string longer than 127 will be rejected on creation, so we have
         // to handle it differently
         let too_long = max_len + 1;
-        let to_string_failure = if too_long > 127 {
-            true
-        } else {
-            false
-        };
-        let res = test_string(
-            field,
-            false,
-            to_string_failure, 
-            &"a".repeat(too_long),
-        );
+        let to_string_failure = if too_long > 127 { true } else { false };
+        let res = test_string(field, false, to_string_failure, &"a".repeat(too_long));
         assert!(res.is_ok());
     }
 
@@ -326,7 +308,7 @@ mod tests {
     #[test]
     fn test_uf2_board_id() {
         do_string_test("uf2_board_id", false, 127);
-    } 
+    }
 
     #[test]
     fn test_redirect_url() {
@@ -376,11 +358,20 @@ mod tests {
 
     #[test]
     fn test_full_cycle_more() {
-        let json_strs = [
-            "{}",
-        ];
+        let json_strs = ["{}"];
         for json in json_strs {
             test_full_cycle_string(json);
         }
+    }
+
+    #[test]
+    fn just_attr() {
+        let json = r#"
+        {
+            "device": {
+                "attributes": "0x80"
+            }
+        }"#;
+        test_full_cycle_string(json);
     }
 }

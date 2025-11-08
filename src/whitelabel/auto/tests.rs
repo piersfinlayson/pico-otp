@@ -33,9 +33,15 @@ fn test_sample() {
     assert_eq!(wl.usb_pid().unwrap(), 0x4678);
     assert_eq!(wl.usb_bcd().unwrap(), 0x0100);
     assert_eq!(wl.usb_lang_id(), None);
-    assert_eq!(wl.usb_manufacturer().unwrap(), "piers.rocks".try_into().unwrap());
+    assert_eq!(
+        wl.usb_manufacturer().unwrap(),
+        "piers.rocks".try_into().unwrap()
+    );
     assert_eq!(wl.usb_product().unwrap(), "pico-otp".try_into().unwrap());
-    assert_eq!(wl.usb_serial_number().unwrap(), "1234abcd".try_into().unwrap());
+    assert_eq!(
+        wl.usb_serial_number().unwrap(),
+        "1234abcd".try_into().unwrap()
+    );
     assert_eq!(wl.usb_max_power(), None);
     assert_eq!(wl.usb_attributes(), None);
     assert_eq!(wl.usb_power_attributes(), None);
@@ -44,11 +50,23 @@ fn test_sample() {
     assert_eq!(wl.scsi_product().unwrap(), "pico-otp".try_into().unwrap());
     assert_eq!(wl.scsi_version().unwrap(), "v123".try_into().unwrap());
 
-    assert_eq!(wl.volume_label().unwrap(), "PIERS.ROCKS".try_into().unwrap());
-    assert_eq!(wl.redirect_url().unwrap(), "https://piers.rocks/".try_into().unwrap());
-    assert_eq!(wl.redirect_name().unwrap(), "piers.rocks".try_into().unwrap());
+    assert_eq!(
+        wl.volume_label().unwrap(),
+        "PIERS.ROCKS".try_into().unwrap()
+    );
+    assert_eq!(
+        wl.redirect_url().unwrap(),
+        "https://piers.rocks/".try_into().unwrap()
+    );
+    assert_eq!(
+        wl.redirect_name().unwrap(),
+        "piers.rocks".try_into().unwrap()
+    );
     assert_eq!(wl.uf2_model().unwrap(), "pico-otp".try_into().unwrap());
-    assert_eq!(wl.uf2_board_id().unwrap(), "pico-otp board id".try_into().unwrap());
+    assert_eq!(
+        wl.uf2_board_id().unwrap(),
+        "pico-otp board id".try_into().unwrap()
+    );
 }
 
 #[test]
@@ -63,9 +81,15 @@ fn test_realistic() {
     assert_eq!(wl.usb_pid().unwrap(), 0x4678);
     assert_eq!(wl.usb_bcd().unwrap(), 0x0100);
     assert_eq!(wl.usb_lang_id(), None);
-    assert_eq!(wl.usb_manufacturer().unwrap(), "piers.rocks".try_into().unwrap());
+    assert_eq!(
+        wl.usb_manufacturer().unwrap(),
+        "piers.rocks".try_into().unwrap()
+    );
     assert_eq!(wl.usb_product().unwrap(), "pico-otp".try_into().unwrap());
-    assert_eq!(wl.usb_serial_number().unwrap(), "1234abcd".try_into().unwrap());
+    assert_eq!(
+        wl.usb_serial_number().unwrap(),
+        "1234abcd".try_into().unwrap()
+    );
     assert_eq!(wl.usb_max_power(), None);
     assert_eq!(wl.usb_attributes(), None);
     assert_eq!(wl.usb_power_attributes(), None);
@@ -74,11 +98,23 @@ fn test_realistic() {
     assert_eq!(wl.scsi_product().unwrap(), "pico-otp".try_into().unwrap());
     assert_eq!(wl.scsi_version().unwrap(), "v123".try_into().unwrap());
 
-    assert_eq!(wl.volume_label().unwrap(), "PIERS.ROCKS".try_into().unwrap());
-    assert_eq!(wl.redirect_url().unwrap(), "https://piers.rocks/".try_into().unwrap());
-    assert_eq!(wl.redirect_name().unwrap(), "piers.rocks".try_into().unwrap());
+    assert_eq!(
+        wl.volume_label().unwrap(),
+        "PIERS.ROCKS".try_into().unwrap()
+    );
+    assert_eq!(
+        wl.redirect_url().unwrap(),
+        "https://piers.rocks/".try_into().unwrap()
+    );
+    assert_eq!(
+        wl.redirect_name().unwrap(),
+        "piers.rocks".try_into().unwrap()
+    );
     assert_eq!(wl.uf2_model().unwrap(), "pico-otp".try_into().unwrap());
-    assert_eq!(wl.uf2_board_id().unwrap(), "pico-otp board id".try_into().unwrap());
+    assert_eq!(
+        wl.uf2_board_id().unwrap(),
+        "pico-otp board id".try_into().unwrap()
+    );
 }
 
 #[test]
@@ -93,9 +129,15 @@ fn test_basic() {
     assert_eq!(wl.usb_pid(), None);
     assert_eq!(wl.usb_bcd(), None);
     assert_eq!(wl.usb_lang_id(), None);
-    assert_eq!(wl.usb_manufacturer().unwrap(), "piers.rocks".try_into().unwrap());
+    assert_eq!(
+        wl.usb_manufacturer().unwrap(),
+        "piers.rocks".try_into().unwrap()
+    );
     assert_eq!(wl.usb_product().unwrap(), "pico-otp".try_into().unwrap());
-    assert_eq!(wl.usb_serial_number().unwrap(), "1234abcd".try_into().unwrap());
+    assert_eq!(
+        wl.usb_serial_number().unwrap(),
+        "1234abcd".try_into().unwrap()
+    );
     assert_eq!(wl.usb_max_power(), None);
     assert_eq!(wl.usb_attributes(), None);
     assert_eq!(wl.usb_power_attributes(), None);
@@ -104,11 +146,23 @@ fn test_basic() {
     assert_eq!(wl.scsi_product().unwrap(), "pico-otp".try_into().unwrap());
     assert_eq!(wl.scsi_version().unwrap(), "v123".try_into().unwrap());
 
-    assert_eq!(wl.volume_label().unwrap(), "PIERS.ROCKS".try_into().unwrap());
-    assert_eq!(wl.redirect_url().unwrap(), "https://piers.rocks/".try_into().unwrap());
-    assert_eq!(wl.redirect_name().unwrap(), "piers.rocks".try_into().unwrap());
+    assert_eq!(
+        wl.volume_label().unwrap(),
+        "PIERS.ROCKS".try_into().unwrap()
+    );
+    assert_eq!(
+        wl.redirect_url().unwrap(),
+        "https://piers.rocks/".try_into().unwrap()
+    );
+    assert_eq!(
+        wl.redirect_name().unwrap(),
+        "piers.rocks".try_into().unwrap()
+    );
     assert_eq!(wl.uf2_model().unwrap(), "pico-otp".try_into().unwrap());
-    assert_eq!(wl.uf2_board_id().unwrap(), "pico-otp board id".try_into().unwrap());
+    assert_eq!(
+        wl.uf2_board_id().unwrap(),
+        "pico-otp board id".try_into().unwrap()
+    );
 }
 
 #[test]
@@ -119,9 +173,15 @@ fn test_utf16() {
     assert!(wl.is_ok());
     let wl = wl.unwrap();
 
-    assert_eq!(wl.usb_manufacturer().unwrap(), "😀piers.rocks".try_into().unwrap());
+    assert_eq!(
+        wl.usb_manufacturer().unwrap(),
+        "😀piers.rocks".try_into().unwrap()
+    );
     assert_eq!(wl.usb_product().unwrap(), "pico⚡otp".try_into().unwrap());
-    assert_eq!(wl.usb_serial_number().unwrap(), "1234abcd号".try_into().unwrap());
+    assert_eq!(
+        wl.usb_serial_number().unwrap(),
+        "1234abcd号".try_into().unwrap()
+    );
 }
 
 #[test]

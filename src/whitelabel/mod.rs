@@ -24,8 +24,7 @@ mod top;
 pub use top::{
     OTP_ROW_UNRESERVED_END, OTP_ROW_UNRESERVED_START, OTP_ROW_USB_BOOT_FLAGS,
     OTP_ROW_USB_BOOT_FLAGS_R1, OTP_ROW_USB_BOOT_FLAGS_R2, OTP_ROW_USB_WHITE_LABEL_DATA,
-    WHITE_LABEL_SCHEMA_URL,
-    WhiteLabelStruct,
+    WHITE_LABEL_SCHEMA_URL, WhiteLabelStruct,
 };
 
 /// Errors that can occur while handling white label data.
@@ -79,7 +78,7 @@ pub enum Error {
     InternalInconsistency(String),
 
     /// Indicates the string data is longer than the maximum supported.
-    StringTooLong(usize)
+    StringTooLong(usize),
 }
 
 impl From<serde_json::Error> for Error {
@@ -326,9 +325,33 @@ impl WhiteLabelling {
 }
 
 fn parse_json(json_str: &str) -> Result<WhiteLabelling, serde_json::Error> {
-    let wl: WhiteLabelling = serde_json::from_str(json_str)?;
+    let mut wl: WhiteLabelling = serde_json::from_str(json_str)?;
+
+    // Perform any corrections needed from JSON
+    correct(&mut wl);
+
+    // Validate it
     validate(&wl)?;
+
     Ok(wl)
+}
+
+fn correct(wl: &mut WhiteLabelling) {
+    // If power provided by not attributes, set default attributes
+    if let Some(device) = wl.device.as_mut()
+        && device.max_power.is_some()
+        && device.attributes.is_none()
+    {
+        device.attributes = Some(0x80.into())
+    }
+
+    // If attributes provided by not power, set default power
+    if let Some(device) = wl.device.as_mut()
+        && device.attributes.is_some()
+        && device.max_power.is_none()
+    {
+        device.max_power = Some(0xfa.into()) // 500mA
+    }
 }
 
 fn validate(wl: &WhiteLabelling) -> Result<(), serde_json::Error> {

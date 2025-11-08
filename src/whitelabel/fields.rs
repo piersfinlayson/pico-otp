@@ -29,7 +29,7 @@ pub(crate) enum FieldKind {
 
 /// Definition of a field in the white label struct.
 #[derive(Debug, Clone, PartialEq)]
-pub (crate) struct Field {
+pub(crate) struct Field {
     index: usize,
     name: &'static str,
     kind: FieldKind,
@@ -89,12 +89,8 @@ impl Field {
             "usb_attr_power" => {
                 if let Some(attr_power) = wls.attr_power() {
                     let attr = attr_power & 0xFF;
-                    if (attr & 0x80) == 0 ||
-                        (attr & 0x1F) != 0 {
-                        return Err(format!(
-                            "Invalid usb_attr_power {:#04X}",
-                            attr
-                        ));
+                    if (attr & 0x80) == 0 || (attr & 0x1F) != 0 {
+                        return Err(format!("Invalid usb_attr_power {:#04X}", attr));
                     }
 
                     let power = (attr_power >> 8) & 0xFF;
@@ -113,10 +109,7 @@ impl Field {
                     let minor = (bcd >> 4) & 0x0F;
                     let patch = bcd & 0x0F;
                     if major > 99 || minor > 9 || patch > 9 {
-                        return Err(format!(
-                            "Invalid usb_bcd_device: {:04X} (max 99.9.9)",
-                            bcd
-                        ));
+                        return Err(format!("Invalid usb_bcd_device: {:04X} (max 99.9.9)", bcd));
                     }
                 }
                 Ok(())
@@ -149,9 +142,7 @@ impl Field {
         if let Some(value) = field_value {
             let value_len = value.chars().count();
             if value_len == 0 {
-                return Err(format!(
-                    "Field '{field_name}' is an empty string",
-                ));
+                return Err(format!("Field '{field_name}' is an empty string",));
             }
             if value_len > max_len {
                 return Err(format!(
@@ -275,5 +266,3 @@ pub const FIELDS: [Field; NUM_FIELDS] = [
     FIELD_UF2_MODEL,
     FIELD_UF2_BOARD_ID,
 ];
-
-

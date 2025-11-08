@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Fixed JSON handling:
+    - Default USB attributes to 0x80 if power but attributes not provided.
+    - Default max power to 0xfa (500mA) if attributes but max power not provided.
+
 ## [0.2.0] - 2025/11/08
 
 - Significant rework or interface to improve usability.
