@@ -3,8 +3,13 @@
 // MIT License
 
 // This file was mostly auto-generated from `/json/whitelabel-schema.json`
-// using the commented out `process_wl_schema()` in `/build.rs`.  It was then
-// hand-edited to be `no_std` compatible by making the following changes:
+// using the commented out `process_wl_schema()` in `/build.rs`.
+//
+// Before re-generating, remove the "pattern" lines from the JSON schema, as
+// these will not generate working `no_std` compatible code.
+//
+// It was then hand-edited to be `no_std` compatible by making the following
+// changes:
 //
 // Replace:
 // - `std::string` `with alloc::string`

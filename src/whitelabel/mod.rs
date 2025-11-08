@@ -15,13 +15,17 @@ use serde::de::Error as _;
 
 pub(crate) mod auto;
 use auto::*;
+mod binary;
+pub use binary::OtpData;
+mod fields;
 mod string;
-pub use string::OtpString;
+use string::OtpString;
 mod top;
 pub use top::{
-    MAX_STRING_LEN, FIELD_NAMES, NUM_INDEX_ROWS, NUM_STRDEF_ROWS, NUM_U16_ROWS, OTP_ROW_USB_BOOT_FLAGS,
+    OTP_ROW_UNRESERVED_END, OTP_ROW_UNRESERVED_START, OTP_ROW_USB_BOOT_FLAGS,
     OTP_ROW_USB_BOOT_FLAGS_R1, OTP_ROW_USB_BOOT_FLAGS_R2, OTP_ROW_USB_WHITE_LABEL_DATA,
-    STRDEF_ROWS, U16_ROWS, WHITE_LABEL_SCHEMA_URL, WhiteLabelStruct,
+    WHITE_LABEL_SCHEMA_URL,
+    WhiteLabelStruct,
 };
 
 /// Errors that can occur while handling white label data.
@@ -37,25 +41,45 @@ pub enum Error {
     /// length of any strings present.
     TooFewRows(usize),
 
-    /// Indicates too many rows were provided to parse the white label data.
-    /// This is only returned from [`WhiteLabelStruct::from_complete_otp`].  It
+    /// Indicates too many rows were provided to parse the white label data. It
     /// suggests that the provided data isn't OTP data at all.  Only pass that
     /// function a complete dump of OTP - that is 4096 rows, all read as ECC.
     TooManyRows(usize),
 
-    /// Invalid white label address.  Returned by [`WhiteLabelStruct::from_complete_otp`]
-    /// if the WHITE_LABEL_ADDR_VALID bit in USB_BOOT_FLAGS is not set, as it
-    /// is not possible to reliably detect the OTP white label data location
-    /// without it.
+    /// Invalid white label address.  Returned if the WHITE_LABEL_ADDR_VALID
+    /// bit in USB_BOOT_FLAGS is not set, as it is not possible to reliably
+    /// detect the OTP white label data location without it.
     InvalidWhiteLabelAddress,
 
-    /// The white label address points to an invalid OTP row (beyond the end of
-    /// the OTP memory).  Returned by [`WhiteLabelStruct::from_complete_otp`].
+    /// The white label address points to an invalid or reserved OTP row.
     InvalidWhiteLabelAddressValue(u16),
 
-    /// Indicates an internal error occurred during processing.  This shouldn't
-    /// be returned, instead the library panics.
-    Internal(String),
+    /// Indicates at least one of the three copies of the USB boot flags in the
+    /// OTP data did not match the others.
+    NonMatchingUsbBootFlags,
+
+    /// Indicates there was some error or inconsistency detected during
+    /// processing OTP data.  This should not happen when processing OTP data
+    /// produced by `pico-otp`, but may occur when processing data from real
+    /// devices, if the OTP data is corrupted or incorrectly read.  The String
+    /// contains details of any inconsistencies.
+    OtpDataError(String),
+
+    /// Indicates the white label data itself is invalid or inconsistent.  The
+    /// String contains details of the problems found.  This only occurs for
+    /// white label data constructed from an external OTP data source, never
+    /// when generated from JSON.
+    InvalidWhiteLabelData(String),
+
+    /// Indicates an internal inconsistency was detected during processing and
+    /// the operation was aborted - to avoid providing an incorrect result.
+    /// This indicates a bug in the library - please report it, with as much
+    /// detail as possible, including the String and the input and operation
+    /// that caused the error.
+    InternalInconsistency(String),
+
+    /// Indicates the string data is longer than the maximum supported.
+    StringTooLong(usize)
 }
 
 impl From<serde_json::Error> for Error {
@@ -80,7 +104,20 @@ impl core::fmt::Display for Error {
             Error::InvalidWhiteLabelAddressValue(row) => {
                 write!(f, "WHITE_LABEL_ADDR points to invalid OTP row: {row}")
             }
-            Error::Internal(s) => write!(f, "Internal error - please report as a bug: {s}"),
+            Error::NonMatchingUsbBootFlags => {
+                write!(f, "The copies of USB_BOOT_FLAGS do not match")
+            }
+            Error::OtpDataError(s) => write!(f, "Invalid or inconsistent OTP data: {s}"),
+            Error::InvalidWhiteLabelData(s) => write!(f, "Invalid white label data: {s}"),
+            Error::InternalInconsistency(s) => write!(
+                f,
+                "Internal inconsistency detected and the operation was aborted.  Please report as a bug: {s}"
+            ),
+            Error::StringTooLong(len) => write!(
+                f,
+                "String is too long: maximum supported length is {}, got {len}",
+                fields::MAX_STRING_LENGTH,
+            ),
         }
     }
 }
@@ -171,7 +208,7 @@ impl WhiteLabelling {
             .as_ref()?
             .manufacturer
             .as_deref()
-            .map(OtpString::from)
+            .map(OtpString::from_pre_validated_string)
     }
 
     /// Returns the product string, if set.
@@ -180,7 +217,7 @@ impl WhiteLabelling {
             .as_ref()?
             .product
             .as_deref()
-            .map(OtpString::from)
+            .map(OtpString::from_pre_validated_string)
     }
 
     /// Returns the serial number string, if set.
@@ -189,7 +226,7 @@ impl WhiteLabelling {
             .as_ref()?
             .serial_number
             .as_deref()
-            .map(OtpString::from)
+            .map(OtpString::from_pre_validated_string)
     }
 
     /// Returns the max power as a u8, if set.
@@ -227,7 +264,7 @@ impl WhiteLabelling {
     pub(crate) fn scsi_vendor(&self) -> Option<OtpString> {
         self.scsi.as_ref()?.vendor.as_deref().map(|s| {
             assert!(s.is_ascii(), "SCSI vendor must be ASCII");
-            OtpString::from(s)
+            OtpString::from_pre_validated_string(s)
         })
     }
 
@@ -235,7 +272,7 @@ impl WhiteLabelling {
     pub(crate) fn scsi_product(&self) -> Option<OtpString> {
         self.scsi.as_ref()?.product.as_deref().map(|s| {
             assert!(s.is_ascii(), "SCSI product must be ASCII");
-            OtpString::from(s)
+            OtpString::from_pre_validated_string(s)
         })
     }
 
@@ -243,7 +280,7 @@ impl WhiteLabelling {
     pub(crate) fn scsi_version(&self) -> Option<OtpString> {
         self.scsi.as_ref()?.version.as_deref().map(|s| {
             assert!(s.is_ascii(), "SCSI version must be ASCII");
-            OtpString::from(s)
+            OtpString::from_pre_validated_string(s)
         })
     }
 
@@ -251,7 +288,7 @@ impl WhiteLabelling {
     pub(crate) fn volume_label(&self) -> Option<OtpString> {
         self.volume.as_ref()?.label.as_deref().map(|s| {
             assert!(s.is_ascii(), "Volume label must be ASCII");
-            OtpString::from(s)
+            OtpString::from_pre_validated_string(s)
         })
     }
 
@@ -259,7 +296,7 @@ impl WhiteLabelling {
     pub(crate) fn uf2_model(&self) -> Option<OtpString> {
         self.volume.as_ref()?.model.as_deref().map(|s| {
             assert!(s.is_ascii(), "UF2 model must be ASCII");
-            OtpString::from(s)
+            OtpString::from_pre_validated_string(s)
         })
     }
 
@@ -267,7 +304,7 @@ impl WhiteLabelling {
     pub(crate) fn uf2_board_id(&self) -> Option<OtpString> {
         self.volume.as_ref()?.board_id.as_deref().map(|s| {
             assert!(s.is_ascii(), "UF2 board ID must be ASCII");
-            OtpString::from(s)
+            OtpString::from_pre_validated_string(s)
         })
     }
 
@@ -275,7 +312,7 @@ impl WhiteLabelling {
     pub(crate) fn redirect_name(&self) -> Option<OtpString> {
         self.volume.as_ref()?.redirect_name.as_deref().map(|s| {
             assert!(s.is_ascii(), "Redirect name must be ASCII");
-            OtpString::from(s)
+            OtpString::from_pre_validated_string(s)
         })
     }
 
@@ -283,7 +320,7 @@ impl WhiteLabelling {
     pub(crate) fn redirect_url(&self) -> Option<OtpString> {
         self.volume.as_ref()?.redirect_url.as_deref().map(|s| {
             assert!(s.is_ascii(), "Redirect URL must be ASCII");
-            OtpString::from(s)
+            OtpString::from_pre_validated_string(s)
         })
     }
 }

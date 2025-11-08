@@ -8,20 +8,20 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use crate::whitelabel::top::MAX_STRING_LEN;
-use crate::whitelabel::{Error, FIELD_NAMES, NUM_INDEX_ROWS};
+use crate::whitelabel::Error;
+use crate::whitelabel::fields::{Field, NUM_FIELDS, MAX_STRING_LENGTH};
 
 /// Represents a string to be stored in OTP, using the STRDEF encoding defined
 /// in the RP2350 datasheet at OTP_DATA:USB_WHITE_LABEL_ADDR Register, section
 /// 13.10.
-/// 
+///
 /// The object supports both ASCII and UTF-16 strings.  However, only the USB
 /// manufacturer, product and serial number strings support UTF-16 encoding.
-/// 
-/// Different fields have different maximum lengths, as defined in
-/// [`MAX_STRING_LEN`].
+///
+/// Different fields have different maximum lengths as defined in the RP2350
+/// datasheet.  No string can be longer than 127 characters.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OtpString {
+pub(crate) struct OtpString {
     string: String,
 }
 
@@ -31,9 +31,29 @@ impl ToString for OtpString {
     }
 }
 
+impl TryFrom<&str> for OtpString {
+    type Error = Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        if value.len() <= MAX_STRING_LENGTH {
+            Ok(OtpString::new(value.to_string()))
+        } else {
+            Err(Error::StringTooLong(value.len()))
+        }
+    }
+}
+
+impl TryFrom<String> for OtpString {
+    type Error = Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
+    }
+}
+
 impl OtpString {
     // STRDEF uses 7 bits to represent length
-    const MAX_LEN: u8 = 127;
+    const MAX_LEN: u8 = MAX_STRING_LENGTH as u8;
     const MAX_ROWS: u8 = 64;
 
     /// Creates a new OtpString from the given string.
@@ -50,6 +70,15 @@ impl OtpString {
     /// Returns true if the string is UTF-16
     pub fn is_utf16(&self) -> bool {
         !self.is_ascii()
+    }
+
+    /// Returns a reference to the underlying string.
+    pub fn string(&self) -> &String {
+        &self.string
+    }
+
+    pub(crate) fn from_pre_validated_string(string: &String) -> Self {
+        Self::try_from(string.as_str()).expect("internal error - string validation failed")
     }
 
     /// Returns the string encoded as a `Vec<u16>` suitable for writing to OTP.
@@ -102,7 +131,8 @@ impl OtpString {
         let high_byte = (old_offset as u16) << 8;
 
         // Update data_offset to point to the next free row after this string
-        *offset = old_offset.checked_add(self.otp_row_count() as u8)
+        *offset = old_offset
+            .checked_add(self.otp_row_count() as u8)
             .expect("internal error - offset overflow");
 
         low_byte | high_byte
@@ -191,27 +221,19 @@ impl OtpString {
     ///
     /// Adds warnings for unusual and suspicious but at least partially
     /// parseable conditions.
-    pub fn from_otp_data(
+    pub(crate) fn from_otp_data(
         rows: &[u16],
         usb_boot_flags: u16,
-        field_name: &str,
+        field: &Field,
         utf16_allowed: bool,
         warnings: &mut Vec<String>,
     ) -> Result<Option<Self>, Error> {
-        let index = FIELD_NAMES
-            .iter()
-            .position(|&name| name == field_name)
-            .ok_or_else(|| Error::Internal(format!("Invalid field name: {}", field_name)))?;
-        let max_string_len = MAX_STRING_LEN[index] as usize;
-        if max_string_len == 0 {
-            return Err(Error::Internal(format!(
-                "{}: field does not support strings",
-                field_name
-            )));
-        }
+        let max_string_len = field.max_length().expect("called with non-string field");
+        let field_name = field.name();
+        let field_index = field.index();
 
-        let bit_set = (usb_boot_flags & (1 << index)) != 0;
-        let strdef = rows[index];
+        let bit_set = (usb_boot_flags & (1 << field_index)) != 0;
+        let strdef = rows[field_index];
 
         if !bit_set {
             // Boot flag bit is clear - field should be None.  This may be
@@ -220,7 +242,7 @@ impl OtpString {
             if strdef != 0 {
                 warnings.push(format!(
                     "{}: boot flag bit {} clear but row contains non-zero STRDEF 0x{:04X}",
-                    field_name, index, strdef
+                    field_name, field_index, strdef
                 ));
             }
             return Ok(None);
@@ -230,7 +252,7 @@ impl OtpString {
         if strdef == 0 {
             warnings.push(format!(
                 "{}: boot flag bit {} set but STRDEF is zero",
-                field_name, index
+                field_name, field_index
             ));
             return Ok(None);
         }
@@ -241,10 +263,10 @@ impl OtpString {
         let is_utf16 = Self::is_utf16_from_row(strdef);
 
         // Validate offset is within bounds and after struct fields
-        if offset < NUM_INDEX_ROWS {
+        if offset < NUM_FIELDS {
             warnings.push(format!(
                 "{}: string offset {} is less than {} (must be after struct fields)",
-                field_name, offset, NUM_INDEX_ROWS
+                field_name, offset, NUM_FIELDS
             ));
             return Ok(None);
         }
@@ -361,24 +383,6 @@ impl OtpString {
     }
 }
 
-impl From<&str> for OtpString {
-    fn from(s: &str) -> Self {
-        Self::new(String::from(s))
-    }
-}
-
-impl From<String> for OtpString {
-    fn from(s: String) -> Self {
-        Self::new(s)
-    }
-}
-
-impl From<&String> for OtpString {
-    fn from(s: &String) -> Self {
-        Self::new(s.clone())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -386,7 +390,7 @@ mod tests {
 
     #[test]
     fn test_string_to_otp_string() {
-        let s = OtpString::from("hello");
+        let s = OtpString::try_from("hello").unwrap();
         assert_eq!(s.char_count(), 5);
         assert_eq!(s.is_ascii(), true);
         assert_eq!(s.is_utf16(), false);
@@ -396,16 +400,15 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "String is too long")]
     fn test_string_too_long() {
         let long_string = "a".repeat(128);
-        let _ = OtpString::from(long_string);
-        assert!(false, "Expected panic for string too long");
+        let res = OtpString::try_from(long_string);
+        assert!(res.is_err(), "Expected error for string too long");
     }
 
     #[test]
     fn test_utf16_string_to_otp_string() {
-        let s = OtpString::from("héllo"); // 'é' is non
+        let s = OtpString::try_from("héllo").unwrap(); // 'é' is non
         assert_eq!(s.char_count(), 5);
         assert_eq!(s.is_ascii(), false);
         assert_eq!(s.is_utf16(), true);
@@ -419,7 +422,7 @@ mod tests {
 
     #[test]
     fn test_to_otp_rows_ascii() {
-        let s = OtpString::from("ABCD");
+        let s = OtpString::try_from("ABCD").unwrap();
         let rows = s.to_otp_rows();
         assert_eq!(rows, vec![0x4241, 0x4443]); // 'A' 'B', 'C' 'D'
         let strdef = s.to_strdef(&mut 5);
@@ -427,7 +430,7 @@ mod tests {
         let otp_row_count = s.otp_row_count();
         assert_eq!(otp_row_count, 2);
 
-        let s = OtpString::from("abcde");
+        let s = OtpString::try_from("abcde").unwrap();
         let rows = s.to_otp_rows();
         assert_eq!(rows, vec![0x6261, 0x6463, 0x0065]); // 'a' 'b', 'c' 'd', 'e' 0
         let strdef = s.to_strdef(&mut 3);
@@ -438,7 +441,7 @@ mod tests {
 
     #[test]
     fn test_to_otp_rows_utf16() {
-        let s = OtpString::from("héllo");
+        let s = OtpString::try_from("héllo").unwrap();
         let rows = s.to_otp_rows();
         assert_eq!(rows, vec![0x0068, 0x00e9, 0x006c, 0x006c, 0x006f]);
         let strdef = s.to_strdef(&mut 8);
@@ -449,7 +452,7 @@ mod tests {
         assert_eq!(otp_row_count, 5);
 
         // Surrogate pair example: 😀 (U+1F600) is encoded as D83D DE00 in UTF-16
-        let s = OtpString::from("hello😀");
+        let s = OtpString::try_from("hello😀").unwrap();
         let rows = s.to_otp_rows();
         assert_eq!(
             rows,
@@ -462,5 +465,4 @@ mod tests {
         let otp_row_count = s.otp_row_count();
         assert_eq!(otp_row_count, 7);
     }
-
 }

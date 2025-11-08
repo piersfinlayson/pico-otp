@@ -1,6 +1,6 @@
 [package]
 name = "pico-otp"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 authors = ["Piers Finlayson <piers@piers.rocks>"]
 description = "Generate and decode OTP data for the Raspberry Pi RP2350/Pico 2"

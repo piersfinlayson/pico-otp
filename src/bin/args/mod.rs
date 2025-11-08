@@ -11,36 +11,21 @@ use clap::{CommandFactory, Parser};
     .args(["json_file", "otp_dump_file"]))]
 pub struct Args {
     /// Path to the JSON whitelabel config file
-    #[clap(
-        short = 'j',
-        alias = "json",
-    )]
+    #[clap(short = 'j', alias = "json")]
     pub json_file: Option<String>,
 
     /// Output the OTP rows to this file
-    #[clap(
-        short = 'o',
-        alias = "output",
-        requires = "json_file",
-    )]
+    #[clap(short = 'o', alias = "output", requires = "json_file")]
     pub otp_output_file: Option<String>,
 
     /// Path to the OTP dump binary file.  Should contain only the ECC OTP rows
     /// that include the whitelabel data (that pointed to by USB_WHITE_LABEL_ADDR,
     /// 0x05c).
-    #[clap(
-        short = 'd',
-        alias = "dump",
-        requires = "boot_flags",
-    )]
+    #[clap(short = 'd', alias = "dump", requires = "boot_flags")]
     pub otp_dump_file: Option<String>,
 
     /// Output the generated JSON to this file
-    #[clap(
-        short = 'e',
-        alias = "json-output",
-        requires = "otp_dump_file",
-    )]
+    #[clap(short = 'e', alias = "json-output", requires = "otp_dump_file")]
     pub json_output_file: Option<String>,
 
     /// USB boot flags associated with the OTP dump.  Must be the non-ECC (raw)
@@ -61,11 +46,10 @@ impl Args {
     pub(crate) fn print_help() {
         Args::command().print_help().unwrap();
     }
-        
+
     fn parse_hex(s: &str) -> Result<u32, String> {
         if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-            u32::from_str_radix(hex, 16)
-                .map_err(|e| format!("Invalid hex value: {}", e))
+            u32::from_str_radix(hex, 16).map_err(|e| format!("Invalid hex value: {}", e))
         } else {
             Err("Value must start with 0x or 0X".to_string())
         }

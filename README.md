@@ -68,23 +68,22 @@ To use this output to white label your RP2350:
 ## Rust Crate - Example Usage 
 
 ```rust
-use pico_otp::WhiteLabelStruct;
+use pico_otp::OtpData;
 
 // Load the JSON file
-let json_str = std::fs::read_to_string("json/sample-wl.json").unwrap();
+let json = std::fs::read_to_string("json/sample-wl.json")
+    .expect("Failed to read sample JSON file");
 
-// Parse it and create the struct
-let whitelabel = WhiteLabelStruct::from_json(&json_str).unwrap();
+// Parse it and create the OTP data object
+let otp_data = OtpData::from_json(&json)?;
 
-// Check some fields
-println!("USB VID: {:#04x}", whitelabel.vendor_id.unwrap());
-println!("USB PID: {:#04x}", whitelabel.product_id.unwrap());
-
-// Generate the required OTP row data
-let otp_data = whitelabel.to_otp_rows();
+// Generate the required OTP row data as a Vec<u16>
+let otp_rows = otp_data.rows();
 
 // And the boot flags
-let usb_boot_flags = whitelabel.usb_boot_flags();
+let usb_boot_flags = otp_data.usb_boot_flags();
+
+// Now write these to OTP memory on the RP2350.
 ```
 
 ## Features

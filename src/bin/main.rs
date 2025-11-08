@@ -3,7 +3,7 @@
 // MIT License
 
 use clap::Parser;
-use pico_otp::WhiteLabelStruct;
+use pico_otp::OtpData;
 
 mod args;
 use args::Args;
@@ -57,27 +57,25 @@ fn process_otp_dump(args: &Args) -> i32 {
     }
 
     // Turn it into u16 rows, from little endian format
-    let otp_dump: Vec<u16> = otp_dump.chunks(2)
+    let otp_dump: Vec<u16> = otp_dump
+        .chunks(2)
         .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
         .collect();
 
-    // Parse it
-    let parse_result = match WhiteLabelStruct::from_otp(usb_boot_flags, &otp_dump) {
-        Ok(wl) => {
-            if output_file.is_none() {
-                println!("Parsed OTP dump successfully");
-            }
-            wl
-        }
+    // Process it
+    let otp_data = match OtpData::from_white_label_data(usb_boot_flags, &otp_dump, true) {
+        Ok(od) => {
+            println!("Parsed OTP dump successfully");
+            od
+        },
         Err(e) => {
             eprintln!("Failed to parse OTP dump: {e}");
-            return 1
+            return 1;
         }
     };
-    let wl = &parse_result.white_label;
 
     // Serialize to JSON
-    let json = match wl.to_json() {
+    let json = match otp_data.to_json() {
         Ok(s) => s,
         Err(e) => {
             eprintln!("Failed to serialize to JSON: {e}");
@@ -97,7 +95,7 @@ fn process_otp_dump(args: &Args) -> i32 {
     if let Some(output_path) = output_file {
         // Write to file
         match std::fs::write(output_path, json_str) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => {
                 eprintln!("Failed to write JSON output file: {e}");
                 return 1;
@@ -107,15 +105,6 @@ fn process_otp_dump(args: &Args) -> i32 {
     } else {
         // Print JSON to stdout
         println!("{}", json_str);
-    }
-
-    if !parse_result.is_clean() {
-        eprintln!("Warnings during OTP dump parsing:");
-        for warning in parse_result.warnings {
-            eprintln!("- {warning}");
-        }
-    } else {
-        println!("No warnings during OTP dump parsing.");
     }
 
     0
@@ -132,31 +121,30 @@ fn process_json(args: &Args) -> i32 {
     // Read the JSON file
     let json_content = std::fs::read_to_string(json_file).expect("Failed to read JSON file");
 
-    let wl = match WhiteLabelStruct::from_json(&json_content) {
-        Ok(wl) => {
+    // Single step to turn it into OtpData
+    let otp_data = match OtpData::from_json(&json_content) {
+        Ok(od) => {
             if output_file.is_none() {
                 println!("Parsed white label data from {json_file} successfully");
             }
-            wl
+            od
         }
         Err(e) => {
             eprintln!("Failed to parse JSON: {e}");
-            return 1
+            return 1;
         }
     };
 
-    let boot_flags = wl.usb_boot_flags();
-    let otp_rows = wl.to_otp_rows();
+    // Get the OTP rows and boot flags
+    let boot_flags = otp_data.usb_boot_flags();
 
     if let Some(output_path) = output_file {
         // Get the bytes as a flat array of u8s, 2 for each ECC row
-        let bytes = otp_rows.iter()
-            .flat_map(|row| row.to_le_bytes())
-            .collect::<Vec<u8>>();
+        let bytes = otp_data.to_le_ecc_bytes();
 
         // Write to file
         match std::fs::write(output_path, &bytes) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => {
                 eprintln!("Failed to write to output file: {e}");
                 return 1;
@@ -170,12 +158,17 @@ fn process_json(args: &Args) -> i32 {
         println!("  - Write the contents of the output to file to OTP memory as ECC rows");
         println!("    starting at a known free OTP region, typically 0x100");
         println!("  - Write the offset you selected to OTP row 0x05c (USB_WHITE_LABEL_ADDR)");
-        println!("  - Write the USB boot flags {boot_flags:#010X} to OTP rows 0x059, 0x5a and 0x5b");
+        println!(
+            "  - Write the USB boot flags {boot_flags:#010X} to OTP rows 0x059, 0x5a and 0x5b"
+        );
         println!("    (USB_BOOT_FLAGS, USB_BOOT_FLAGS_R1 and USB_BOOT_FLAGS_R2)");
         println!("    as raw (not ECC) data");
         println!("-----");
-        println!("PROCEED WITH CAUTION - WRITING TO OTP IS PERMANENT AND MAY IRREPARABLY BRICK YOUR DEVICE");
+        println!(
+            "PROCEED WITH CAUTION - WRITING TO OTP IS PERMANENT AND MAY IRREPARABLY BRICK YOUR DEVICE"
+        );
     } else {
+        let otp_rows = otp_data.rows();
         println!("USB Boot Flags: {boot_flags:#010X}");
         println!("Total OTP row count: {}", otp_rows.len());
 
@@ -208,11 +201,11 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
         let json_path = temp_dir.path().join("test-wl.json");
         std::fs::write(&json_path, test_json).expect("Failed to write test JSON");
-        
+
         // Set args
         let args = Args {
             json_file: Some(json_path.to_str().unwrap().to_string()),
-            .. Default::default()
+            ..Default::default()
         };
         let rc = run(&args);
         assert_eq!(rc, 0);

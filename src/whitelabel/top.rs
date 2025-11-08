@@ -11,27 +11,58 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::str::FromStr;
 
-use crate::whitelabel::auto::{WhiteLabellingDeviceManufacturer, WhiteLabellingDeviceSerialNumber, WhiteLabellingDeviceProduct, WhiteLabellingDeviceAttributes, WhiteLabellingDeviceMaxPower};
-use crate::whitelabel::auto::{WhiteLabellingScsiProduct, WhiteLabellingScsiVendor, WhiteLabellingScsiVersion};
-use crate::whitelabel::auto::{WhiteLabellingVolumeLabel, WhiteLabellingVolumeModel, WhiteLabellingVolumeBoardId, WhiteLabellingVolumeRedirectName, WhiteLabellingVolumeRedirectUrl};
-use crate::whitelabel::{Error, OtpString, WhiteLabelling, WhiteLabellingDevice, WhiteLabellingScsi, WhiteLabellingVolume};
+use crate::whitelabel::auto::{
+    WhiteLabellingDeviceAttributes, WhiteLabellingDeviceManufacturer, WhiteLabellingDeviceMaxPower,
+    WhiteLabellingDeviceProduct, WhiteLabellingDeviceSerialNumber,
+};
+use crate::whitelabel::auto::{
+    WhiteLabellingScsiProduct, WhiteLabellingScsiVendor, WhiteLabellingScsiVersion,
+};
+use crate::whitelabel::auto::{
+    WhiteLabellingVolumeBoardId, WhiteLabellingVolumeLabel, WhiteLabellingVolumeModel,
+    WhiteLabellingVolumeRedirectName, WhiteLabellingVolumeRedirectUrl,
+};
+use crate::whitelabel::{
+    Error, OtpData, OtpString, WhiteLabelling, WhiteLabellingDevice, WhiteLabellingScsi,
+    WhiteLabellingVolume,
+};
+use crate::whitelabel::fields::{
+    Field,
+    FIELDS,
+    FIELD_USB_VENDOR_ID,
+    FIELD_USB_PRODUCT_ID,
+    FIELD_USB_BCD_DEVICE,
+    FIELD_USB_LANGUAGE_ID,
+    FIELD_USB_MANUFACTURER,
+    FIELD_USB_PRODUCT,
+    FIELD_USB_SERIAL_NUMBER,
+    FIELD_USB_ATTR_POWER,
+    FIELD_VOLUME_LABEL,
+    FIELD_SCSI_VENDOR,
+    FIELD_SCSI_PRODUCT,
+    FIELD_SCSI_VERSION,
+    FIELD_REDIRECT_URL,
+    FIELD_REDIRECT_NAME,
+    FIELD_UF2_MODEL,
+    FIELD_UF2_BOARD_ID,
+};
 
-/// Number of rows in the white label struct that are u16 values.
-pub const NUM_U16_ROWS: usize = 5;
-/// Indices of the u16 rows in the white label struct.
-pub const U16_ROWS: [usize; NUM_U16_ROWS] = [0, 1, 2, 3, 7];
-/// Number of rows in the white label struct that are STRDEF pointers.
-pub const NUM_STRDEF_ROWS: usize = 11;
-/// Indices of the STRDEF rows in the white label struct.
-pub const STRDEF_ROWS: [usize; NUM_STRDEF_ROWS] = [4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15];
-/// Total number of rows in the white label struct.
-pub const NUM_INDEX_ROWS: usize = NUM_U16_ROWS + NUM_STRDEF_ROWS;
-/// White label address value valid bit index within the USB_BOOT_FLAGS
-pub const WHITE_LABEL_ADDR_VALID_BIT_NUM: usize = 22;
-/// DP/DM Swap bit index within the USB_BOOT_FLAGS
-pub const DP_DM_SWAP_BIT_NUM: usize = 23;
-/// Total number of rows the RP2350's OTP memory
-pub const TOTAL_OTP_ROWS: usize = 4096;
+// Number of rows in the white label struct that are u16 fields.
+const NUM_U16_ROWS: usize = 5;
+// Indices of the u16 rows in the white label struct.
+const U16_ROWS: [usize; NUM_U16_ROWS] = [0, 1, 2, 3, 7];
+// Number of rows in the white label struct that are STRDEF pointers.
+const NUM_STRDEF_ROWS: usize = 11;
+// Indices of the STRDEF rows in the white label struct.
+const STRDEF_ROWS: [usize; NUM_STRDEF_ROWS] = [4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15];
+// Total number of rows in the white label struct.
+const NUM_INDEX_ROWS: usize = NUM_U16_ROWS + NUM_STRDEF_ROWS;
+// White label address value valid bit index within the USB_BOOT_FLAGS
+pub(crate) const WHITE_LABEL_ADDR_VALID_BIT_NUM: usize = 22;
+// DP/DM Swap bit index within the USB_BOOT_FLAGS
+const DP_DM_SWAP_BIT_NUM: usize = 23;
+// Total number of rows the RP2350's OTP memory
+pub(crate) const TOTAL_OTP_ROWS: usize = 4096;
 
 /// OTP row index for USB_BOOT_FLAGS
 pub const OTP_ROW_USB_BOOT_FLAGS: u16 = 0x059;
@@ -42,87 +73,51 @@ pub const OTP_ROW_USB_BOOT_FLAGS_R2: u16 = 0x05b;
 /// OTP row index for USB_WHITE_LABEL_DATA
 pub const OTP_ROW_USB_WHITE_LABEL_DATA: u16 = 0x05c;
 
+/// Start of unreserved OTP rows for white label data storage as laid out in
+/// the datasheet.  Pages 0-1 are reserved for Raspberry Pi use, and page 2
+/// is assumed to be reserved for bootloader use.
+pub const OTP_ROW_UNRESERVED_START: u16 = 0x0c0;
+
+/// End of unreserved OTP rows for white label data storage as laid out in the
+/// datasheet.  This row itself is reserved.  Pages 61-63 are reserved for
+/// Raspberry Pi use.
+pub const OTP_ROW_UNRESERVED_END: u16 = 0xf40;
+
 /// URL of the official Raspberry Pi picotool white label JSON schema,
 /// supported by this crate
-pub const WHITE_LABEL_SCHEMA_URL: &str =
-    "https://raw.githubusercontent.com/raspberrypi/picotool/develop/json/schemas/whitelabel-schema.json";
-
-/// Names of the fields in the white label struct, indexed by the relevant
-/// bit position in [`OTP_ROW_USB_WHITE_LABEL_DATA`].
-pub const FIELD_NAMES: [&str; NUM_INDEX_ROWS] = [
-    "usb_vendor_id",
-    "usb_product_id",
-    "usb_bcd_device",
-    "usb_language_id",
-    "usb_manufacturer",
-    "usb_product",
-    "usb_serial_number",
-    "usb_attr_power",
-    "volume_label",
-    "scsi_vendor",
-    "scsi_product",
-    "scsi_version",
-    "redirect_url",
-    "redirect_name",
-    "uf2_model",
-    "uf2_board_id",
-];
-
-/// Maximum string lengths for each field in the white label struct, indexed
-/// by the relevant bit position in USB_WHITE_LABEL_ADDR.  A value of 0
-/// indicates a u16 field.
-pub const MAX_STRING_LEN: [usize; NUM_INDEX_ROWS] = [
-    0,
-    0,
-    0,
-    0,
-    30,
-    30,
-    30,
-    0,
-    11,
-    8,
-    16,
-    4,
-    127,
-    127,
-    127,
-    127,
-];
+pub const WHITE_LABEL_SCHEMA_URL: &str = "https://raw.githubusercontent.com/piersfinlayson/pico-otp/main/json/whitelabel-schema.json";
 
 /// Represents the USB white label structure stored in OTP.
 ///
 /// Use [`WhiteLabelStruct::from_json`] to create an instance from a JSON
-/// whitelabel representation, or use [`WhiteLabelStruct::from_otp`] to parse
-/// an instance from OTP rows.
+/// whitelabel representation, or use [`From<OtpData>::from`].
 ///
 /// To create an empty instance, use [`WhiteLabelStruct::default`] and set
 /// fields as required.
 ///
-/// To create the OTP data rows required to store this white label structure,
-/// use [`WhiteLabelStruct::to_otp_rows`] and for the USB_BOOT_FLAGS value,
-/// [`WhiteLabelStruct::usb_boot_flags`].
+/// To create the OTP data required to store this white label structure on the
+/// device, use [`From<WhiteLabelStruct>::from`].
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct WhiteLabelStruct {
-    pub vendor_id: Option<u16>,
-    pub product_id: Option<u16>,
-    pub bcd_device: Option<u16>,
-    pub language_id: Option<u16>,
-    pub manufacturer: Option<OtpString>,
-    pub product: Option<OtpString>,
-    pub serial_number: Option<OtpString>,
-    pub attr_power: Option<u16>,
-    pub volume_label: Option<OtpString>,
-    pub scsi_vendor: Option<OtpString>,
-    pub scsi_product: Option<OtpString>,
-    pub scsi_version: Option<OtpString>,
-    pub redirect_url: Option<OtpString>,
-    pub redirect_name: Option<OtpString>,
-    pub uf2_model: Option<OtpString>,
-    pub uf2_board_id: Option<OtpString>,
+    vendor_id: Option<u16>,
+    product_id: Option<u16>,
+    bcd_device: Option<u16>,
+    language_id: Option<u16>,
+    manufacturer: Option<OtpString>,
+    product: Option<OtpString>,
+    serial_number: Option<OtpString>,
+    attr_power: Option<u16>,
+    volume_label: Option<OtpString>,
+    scsi_vendor: Option<OtpString>,
+    scsi_product: Option<OtpString>,
+    scsi_version: Option<OtpString>,
+    redirect_url: Option<OtpString>,
+    redirect_name: Option<OtpString>,
+    uf2_model: Option<OtpString>,
+    uf2_board_id: Option<OtpString>,
+    warnings: Vec<String>,
 }
 
-// Has to handle options
 impl From<WhiteLabelStruct> for WhiteLabellingDevice {
     fn from(wls: WhiteLabelStruct) -> Self {
         let mut device = WhiteLabellingDevice::default();
@@ -137,11 +132,23 @@ impl From<WhiteLabelStruct> for WhiteLabellingDevice {
             integer as f64 + (tenths as f64 / 10.0) + (hundredths as f64 / 100.0)
         });
         let lang_id = wls.language_id.as_ref().map(|v| format!("{:#06x}", v));
-        let manufacturer = wls.manufacturer.as_ref().map(|s| WhiteLabellingDeviceManufacturer::from_str(&s.to_string()).expect("Invalid manufacturer string"));
-        let product = wls.product.as_ref().map(|s| WhiteLabellingDeviceProduct::from_str(&s.to_string()).expect("Invalid product string"));
-        let serial_number = wls.serial_number.as_ref().map(|s| WhiteLabellingDeviceSerialNumber::from_str(&s.to_string()).expect("Invalid serial number string"));
-        let attributes = wls.attr_power.as_ref().map(|v| WhiteLabellingDeviceAttributes::String(format!("{:#04x}", ((*v & 0xFF) as u8))));
-        let max_power = wls.attr_power.as_ref().map(|v| WhiteLabellingDeviceMaxPower::String(format!("{:#04x}", (((*v & 0xFF00) >> 8) as u8))));
+        let manufacturer = wls.manufacturer.as_ref().map(|s| {
+            WhiteLabellingDeviceManufacturer::from_str(&s.to_string())
+                .expect("Invalid manufacturer string")
+        });
+        let product = wls.product.as_ref().map(|s| {
+            WhiteLabellingDeviceProduct::from_str(&s.to_string()).expect("Invalid product string")
+        });
+        let serial_number = wls.serial_number.as_ref().map(|s| {
+            WhiteLabellingDeviceSerialNumber::from_str(&s.to_string())
+                .expect("Invalid serial number string")
+        });
+        let attributes = wls.attr_power.as_ref().map(|v| {
+            WhiteLabellingDeviceAttributes::String(format!("{:#04x}", ((*v & 0xFF) as u8)))
+        });
+        let max_power = wls.attr_power.as_ref().map(|v| {
+            WhiteLabellingDeviceMaxPower::String(format!("{:#04x}", (((*v & 0xFF00) >> 8) as u8)))
+        });
 
         device.vid = vid;
         device.pid = pid;
@@ -157,14 +164,21 @@ impl From<WhiteLabelStruct> for WhiteLabellingDevice {
     }
 }
 
-// Into WhiteLabellingScsi
 impl From<WhiteLabelStruct> for WhiteLabellingScsi {
     fn from(wls: WhiteLabelStruct) -> Self {
         let mut scsi = WhiteLabellingScsi::default();
 
-        let vendor = wls.scsi_vendor.as_ref().map(|s| WhiteLabellingScsiVendor::from_str(&s.to_string()).expect("Invalid SCSI vendor string"));
-        let product = wls.scsi_product.as_ref().map(|s| WhiteLabellingScsiProduct::from_str(&s.to_string()).expect("Invalid SCSI product string"));
-        let version = wls.scsi_version.as_ref().map(|s| WhiteLabellingScsiVersion::from_str(&s.to_string()).expect("Invalid SCSI version string"));
+        let vendor = wls.scsi_vendor.as_ref().map(|s| {
+            WhiteLabellingScsiVendor::from_str(&s.to_string()).expect("Invalid SCSI vendor string")
+        });
+        let product = wls.scsi_product.as_ref().map(|s| {
+            WhiteLabellingScsiProduct::from_str(&s.to_string())
+                .expect("Invalid SCSI product string")
+        });
+        let version = wls.scsi_version.as_ref().map(|s| {
+            WhiteLabellingScsiVersion::from_str(&s.to_string())
+                .expect("Invalid SCSI version string")
+        });
 
         scsi.vendor = vendor;
         scsi.product = product;
@@ -174,16 +188,29 @@ impl From<WhiteLabelStruct> for WhiteLabellingScsi {
     }
 }
 
-// Into WhiteLabellingVolume
 impl From<WhiteLabelStruct> for WhiteLabellingVolume {
     fn from(wls: WhiteLabelStruct) -> Self {
         let mut volume = WhiteLabellingVolume::default();
 
-        let label = wls.volume_label.as_ref().map(|s| WhiteLabellingVolumeLabel::from_str(&s.to_string()).expect("Invalid volume label string"));
-        let model = wls.uf2_model.as_ref().map(|s| WhiteLabellingVolumeModel::from_str(&s.to_string()).expect("Invalid UF2 model string"));
-        let board_id = wls.uf2_board_id.as_ref().map(|s| WhiteLabellingVolumeBoardId::from_str(&s.to_string()).expect("Invalid UF2 board ID string"));
-        let redirect_name = wls.redirect_name.as_ref().map(|s| WhiteLabellingVolumeRedirectName::from_str(&s.to_string()).expect("Invalid redirect name string"));
-        let redirect_url = wls.redirect_url.as_ref().map(|s| WhiteLabellingVolumeRedirectUrl::from_str(&s.to_string()).expect("Invalid redirect URL string"));
+        let label = wls.volume_label.as_ref().map(|s| {
+            WhiteLabellingVolumeLabel::from_str(&s.to_string())
+                .expect("Invalid volume label string")
+        });
+        let model = wls.uf2_model.as_ref().map(|s| {
+            WhiteLabellingVolumeModel::from_str(&s.to_string()).expect("Invalid UF2 model string")
+        });
+        let board_id = wls.uf2_board_id.as_ref().map(|s| {
+            WhiteLabellingVolumeBoardId::from_str(&s.to_string())
+                .expect("Invalid UF2 board ID string")
+        });
+        let redirect_name = wls.redirect_name.as_ref().map(|s| {
+            WhiteLabellingVolumeRedirectName::from_str(&s.to_string())
+                .expect("Invalid redirect name string")
+        });
+        let redirect_url = wls.redirect_url.as_ref().map(|s| {
+            WhiteLabellingVolumeRedirectUrl::from_str(&s.to_string())
+                .expect("Invalid redirect URL string")
+        });
 
         volume.label = label;
         volume.model = model;
@@ -195,17 +222,24 @@ impl From<WhiteLabelStruct> for WhiteLabellingVolume {
     }
 }
 
-// Into WhiteLabelling
 impl From<WhiteLabelStruct> for WhiteLabelling {
     fn from(wls: WhiteLabelStruct) -> Self {
         let mut wl = WhiteLabelling::default();
 
-        wl.schema = Some(serde_json::Value::String(WHITE_LABEL_SCHEMA_URL.to_string()));
+        wl.schema = Some(serde_json::Value::String(
+            WHITE_LABEL_SCHEMA_URL.to_string(),
+        ));
 
         // Only create device if any device fields are present
-        if wls.vendor_id.is_some() || wls.product_id.is_some() || wls.bcd_device.is_some()
-            || wls.language_id.is_some() || wls.manufacturer.is_some() 
-            || wls.product.is_some() || wls.serial_number.is_some() || wls.attr_power.is_some() {
+        if wls.vendor_id.is_some()
+            || wls.product_id.is_some()
+            || wls.bcd_device.is_some()
+            || wls.language_id.is_some()
+            || wls.manufacturer.is_some()
+            || wls.product.is_some()
+            || wls.serial_number.is_some()
+            || wls.attr_power.is_some()
+        {
             wl.device = Some(WhiteLabellingDevice::from(wls.clone()));
         }
 
@@ -215,14 +249,41 @@ impl From<WhiteLabelStruct> for WhiteLabelling {
         }
 
         // Only create volume if any volume fields are present
-        if wls.volume_label.is_some() || wls.uf2_model.is_some() || wls.uf2_board_id.is_some()
-            || wls.redirect_name.is_some() || wls.redirect_url.is_some() {
+        if wls.volume_label.is_some()
+            || wls.uf2_model.is_some()
+            || wls.uf2_board_id.is_some()
+            || wls.redirect_name.is_some()
+            || wls.redirect_url.is_some()
+        {
             wl.volume = Some(WhiteLabellingVolume::from(wls.clone()));
         } else {
             wl.volume = None;
         }
 
         wl
+    }
+}
+
+/// Converts OtpData into a WhiteLabelStruct.
+impl TryFrom<&OtpData> for WhiteLabelStruct {
+    type Error = Error;
+    fn try_from(otp_data: &OtpData) -> Result<Self, Error> {
+        let result = WhiteLabelStruct::parse_otp(
+            otp_data.usb_boot_flags(),
+            otp_data.rows(),
+        )?;
+
+        if result.is_clean() {
+            Ok(result.white_label().clone())
+        } else {
+            if otp_data.strict() {
+                Err(Error::OtpDataError(result.warnings().join("\n")))
+            } else {
+                let mut wl = result.white_label().clone();
+                wl.warnings = result.warnings().clone();
+                Ok(wl)
+            }
+        }
     }
 }
 
@@ -237,7 +298,18 @@ impl WhiteLabelStruct {
     /// required.
     pub fn from_json(json: &str) -> Result<Self, Error> {
         let wl = WhiteLabelling::from_json(json)?;
-        Ok(Self::from_white_labelling(wl))
+
+        let wls = Self::from_white_labelling(wl);
+
+        // It should be impossible for strict OTP data generation to fail here,
+        // as `from_json` should return an Error if there are any issues.
+        // Therefore, we generate the OTP data in strict mode, and check that
+        // succeeds.
+        if let Err(e) = wls.to_otp_data_strict() {
+            panic!("Internal inconsistency generating OTP data: {e}");
+        }
+
+        Ok(wls)
     }
 
     /// Creates a JSON representation of this WhiteLabelStruct.
@@ -245,6 +317,234 @@ impl WhiteLabelStruct {
         let wl = WhiteLabelling::from(self.clone());
         let result = serde_json::to_value(&wl)?;
         Ok(result)
+    }
+
+    /// Returns false if there were any warnings during creation.  This is
+    /// guaranteed to return false if strict parsing was used for an external
+    /// OTP dump, or when generated internally from JSON data.  However, it
+    /// may return false if non-strict parsing of external OTP data was used.
+    pub fn is_clean(&self) -> bool {
+        self.warnings.is_empty()
+    }
+
+    /// Returns the warnings that were generated during creation.
+    pub fn warnings(&self) -> &[String] {
+        &self.warnings
+    }
+
+    // Validates all fields and updates warnings
+    fn validate_fields(&mut self) {
+        self.warnings = vec![];
+        for field in FIELDS {
+            match field.validate(&self) {
+                Ok(_) => {}
+                Err(e) => {
+                    self.warnings.push(e);
+                }
+            }
+        }
+    }
+
+    // Update warnings after each set operation 
+    fn update_warnings(&mut self) {
+        self.validate_fields();
+    }
+
+    /// Sets the USB Vendor ID.
+    pub fn set_vid(&mut self, vid: u16) {
+        self.vendor_id = Some(vid);
+        self.update_warnings();
+    }
+
+    /// Sets the USB Product ID.
+    pub fn set_pid(&mut self, pid: u16) {
+        self.product_id = Some(pid);
+        self.update_warnings();
+    }
+
+    /// Sets the USB Manufacturer string.
+    pub fn set_manufacturer<S: AsRef<str>>(&mut self, manufacturer: S) -> Result<(), Error>{
+        self.manufacturer = Some(OtpString::try_from(manufacturer.as_ref())?);
+        self.update_warnings();
+        Ok(())
+    }
+
+    /// Sets the USB Product string.
+    pub fn set_product<S: AsRef<str>>(&mut self, product: S) -> Result<(), Error> {
+        self.product = Some(OtpString::try_from(product.as_ref())?);
+        self.update_warnings();
+        Ok(())
+    }
+
+    /// Sets the USB Serial Number string.
+    pub fn set_serial_number<S: AsRef<str>>(&mut self, serial_number: S) -> Result<(), Error> {
+        self.serial_number = Some(OtpString::try_from(serial_number.as_ref())?);
+        self.update_warnings();
+        Ok(())
+    }
+
+    /// Sets the USB device BCD value (e.g. 0x0200 for version 2.00).
+    pub fn set_bcd_device(&mut self, bcd: u16) {
+        self.bcd_device = Some(bcd);
+        self.update_warnings();
+    }
+
+    /// Sets the USB Language ID.
+    pub fn set_language_id(&mut self, lang_id: u16) {
+        self.language_id = Some(lang_id);
+        self.update_warnings();
+    }
+
+    /// Sets the USB attributes and power.
+    pub fn set_attr_power(&mut self, attr: u8, power: u8) {
+        self.attr_power = Some((attr as u16) | ((power as u16) << 8));
+        self.update_warnings();
+    }
+
+    /// Sets the USB Volume Label string.
+    pub fn set_volume_label<S: AsRef<str>>(&mut self, volume_label: S) -> Result<(), Error> {
+        self.volume_label = Some(OtpString::try_from(volume_label.as_ref())?);
+        self.update_warnings();
+        Ok(())
+    }
+
+    /// Sets the SCSI Vendor string.
+    pub fn set_scsi_vendor<S: AsRef<str>>(&mut self, scsi_vendor: S) -> Result<(), Error> {
+        self.scsi_vendor = Some(OtpString::try_from(scsi_vendor.as_ref())?);
+        self.update_warnings();
+        Ok(())
+    }
+
+    /// Sets the SCSI Product string.
+    pub fn set_scsi_product<S: AsRef<str>>(&mut self, scsi_product: S) -> Result<(), Error> {
+        self.scsi_product = Some(OtpString::try_from(scsi_product.as_ref())?);
+        self.update_warnings();
+        Ok(())
+    }
+
+    /// Sets the SCSI Version string.
+    pub fn set_scsi_version<S: AsRef<str>>(&mut self, scsi_version: S) -> Result<(), Error> {
+        self.scsi_version = Some(OtpString::try_from(scsi_version.as_ref())?);
+        self.update_warnings();
+        Ok(())
+    }
+
+    /// Sets the UF2 Model string.
+    pub fn set_uf2_model<S: AsRef<str>>(&mut self, uf2_model: S) -> Result<(), Error> {
+        self.uf2_model = Some(OtpString::try_from(uf2_model.as_ref())?);
+        self.update_warnings();
+        Ok(())
+    }
+
+    /// Sets the UF2 Board ID string.
+    pub fn set_uf2_board_id<S: AsRef<str>>(&mut self, uf2_board_id: S) -> Result<(), Error> {
+        self.uf2_board_id = Some(OtpString::try_from(uf2_board_id.as_ref())?);
+        self.update_warnings();
+        Ok(())
+    }
+
+    /// Sets the Redirect URL string.
+    pub fn set_redirect_url<S: AsRef<str>>(&mut self, redirect_url: S) -> Result<(), Error> {
+        self.redirect_url = Some(OtpString::try_from(redirect_url.as_ref())?);
+        self.update_warnings();
+        Ok(())
+    }
+
+    /// Sets the Redirect Name string.
+    pub fn set_redirect_name<S: AsRef<str>>(&mut self, redirect_name: S) -> Result<(), Error> {
+        self.redirect_name = Some(OtpString::try_from(redirect_name.as_ref())?);
+        self.update_warnings();
+        Ok(())
+    }
+
+    /// Returns the USB Vendor ID, if set.
+    pub fn vid(&self) -> Option<u16> {
+        self.vendor_id
+    }
+
+    /// Returns the USB Product ID, if set.
+    pub fn pid(&self) -> Option<u16> {
+        self.product_id
+    }
+
+    /// Returns a reference to the USB Manufacturer string, if set.
+    pub fn manufacturer(&self) -> Option<&String> {
+        self.manufacturer.as_ref().map(|s| s.string())
+    }
+
+    /// Returns a reference to the USB Product string, if set.
+    pub fn product(&self) -> Option<&String> {
+        self.product.as_ref().map(|s| s.string())
+    }
+
+    /// Returns a reference to the USB Serial Number string, if set.
+    pub fn serial_number(&self) -> Option<&String> {
+        self.serial_number.as_ref().map(|s| s.string())
+    }
+
+    /// Returns the USB BCD value, if set.
+    pub fn bcd_device(&self) -> Option<u16> {
+        self.bcd_device
+    }
+
+    /// Returns the USB Language ID, if set.
+    pub fn language_id(&self) -> Option<u16> {
+        self.language_id
+    }
+
+    /// Returns the USB attributes and power, if set.
+    pub fn attr_power(&self) -> Option<u16> {
+        self.attr_power
+    }
+
+    /// Returns power attributes if set.
+    pub fn power(&self) -> Option<u8> {
+        self.attr_power.map(|v| ((v & 0xFF00) >> 8) as u8)
+    }
+
+    /// Returns the USB attributes and power, if set.
+    pub fn attributes(&self) -> Option<u8> {
+        self.attr_power.map(|v| (v & 0x00FF) as u8)
+    }
+
+    /// Returns a reference to the USB Volume Label string, if set.
+    pub fn volume_label(&self) -> Option<&String> {
+        self.volume_label.as_ref().map(|s| s.string())
+    }
+
+    /// Returns a reference to the SCSI Vendor string, if set.
+    pub fn scsi_vendor(&self) -> Option<&String> {
+        self.scsi_vendor.as_ref().map(|s| s.string())
+    }
+
+    /// Returns a reference to the SCSI Product string, if set.
+    pub fn scsi_product(&self) -> Option<&String> {
+        self.scsi_product.as_ref().map(|s| s.string())
+    }
+
+    /// Returns a reference to the SCSI Version string, if set.
+    pub fn scsi_version(&self) -> Option<&String> {
+        self.scsi_version.as_ref().map(|s| s.string())
+    }
+
+    /// Returns a reference to the UF2 Model string, if set.
+    pub fn uf2_model(&self) -> Option<&String> {
+        self.uf2_model.as_ref().map(|s| s.string())
+    }
+
+    /// Returns a reference to the UF2 Board ID string, if set.
+    pub fn uf2_board_id(&self) -> Option<&String> {
+        self.uf2_board_id.as_ref().map(|s| s.string())
+    }
+
+    /// Returns a reference to the Redirect URL string, if set.
+    pub fn redirect_url(&self) -> Option<&String> {
+        self.redirect_url.as_ref().map(|s| s.string())
+    }
+
+    /// Returns a reference to the Redirect Name string, if set.
+    pub fn redirect_name(&self) -> Option<&String> {
+        self.redirect_name.as_ref().map(|s| s.string())
     }
 
     /// Creates a WhiteLabelStruct from a WhiteLabelling instance.
@@ -266,7 +566,7 @@ impl WhiteLabelStruct {
         let uf2_model = wl.uf2_model();
         let uf2_board_id = wl.uf2_board_id();
 
-        let wls = Self {
+        let mut wls = Self {
             vendor_id,
             product_id,
             bcd_device,
@@ -283,10 +583,18 @@ impl WhiteLabelStruct {
             redirect_name,
             uf2_model,
             uf2_board_id,
+            warnings: vec![],
         };
 
         wls.validate();
+        wls.validate_fields();
 
+        if !wls.is_clean() {
+            panic!(
+                "Invalid WhiteLabelStruct created from WhiteLabelling: {:?}",
+                wls.warnings()
+            );
+        }
         wls
     }
 
@@ -306,31 +614,6 @@ impl WhiteLabelStruct {
             U16_ROWS.len() + STRDEF_ROWS.len(),
             "U16_ROWS and STRDEF_ROWS must be disjoint and cover all struct fields"
         );
-
-        if let Some(v) = self.volume_label.as_ref() {
-            assert!(v.is_ascii());
-        }
-        if let Some(v) = self.scsi_vendor.as_ref() {
-            assert!(v.is_ascii());
-        }
-        if let Some(v) = self.scsi_product.as_ref() {
-            assert!(v.is_ascii());
-        }
-        if let Some(v) = self.scsi_version.as_ref() {
-            assert!(v.is_ascii());
-        }
-        if let Some(v) = self.redirect_url.as_ref() {
-            assert!(v.is_ascii());
-        }
-        if let Some(v) = self.redirect_name.as_ref() {
-            assert!(v.is_ascii());
-        }
-        if let Some(v) = self.uf2_model.as_ref() {
-            assert!(v.is_ascii());
-        }
-        if let Some(v) = self.uf2_board_id.as_ref() {
-            assert!(v.is_ascii());
-        }
     }
 
     /// Returns the u32 value to store in the USB_BOOT_FLAGS row, as non-ECC
@@ -519,6 +802,46 @@ impl WhiteLabelStruct {
         total
     }
 
+    /// Creates the OTP data required to store this white label structure,
+    /// returning an error if there were any issues found within the white
+    /// label structure.
+    ///
+    /// The use of this function is strongly recommended over
+    /// [`to_otp_data_loose`](`Self::to_otp_data_loose`) where you are
+    /// generating the data to be written to a real device.
+    ///
+    /// Returns:
+    /// - `Ok(OtpData)` if the white label structure is valid.
+    /// - `Err(Error::InvalidWhiteLabelData)` if the white label structure is
+    ///   invalid or inconsistent.
+    pub fn to_otp_data_strict(&self) -> Result<OtpData, Error> {
+        if !self.is_clean() {
+            let warnings = self.warnings().join("\n");
+            return Err(Error::InvalidWhiteLabelData(warnings));
+        }
+        Ok(self.create_otp_data(true))
+    }
+
+    /// Creates the OTP data required to store this white label structure.
+    /// Succeeds if there are any warnings present in the white label
+    /// structure.
+    ///
+    /// The use of [`to_otp_data_strict`](`Self::to_otp_data_strict`) is
+    /// strongly recommended over this function where you are generating the
+    /// data to be written to a real device.
+    ///
+    /// Returns:
+    /// - `OtpData` containing the OTP data rows.
+    pub fn to_otp_data_loose(&self) -> OtpData {
+        self.create_otp_data(false)
+    }
+
+    fn create_otp_data(&self, strict: bool) -> OtpData {
+        let rows = self.to_otp_rows();
+        let usb_boot_flags = self.usb_boot_flags();
+        OtpData::new(usb_boot_flags, rows, strict)
+    }
+
     /// Returns a `Vec<u16>` containing all of the rows required to store the
     /// USB white label structure in OTP, including the row pointed to by
     /// USB_WHITE_LABEL_DATA.
@@ -538,7 +861,7 @@ impl WhiteLabelStruct {
     /// USB_WHITE_LABEL_ADDR (0x5c).  The offset chosen for the USB white
     /// label data is often 0x100, as it's in a normally clear, unreserved
     /// area.
-    pub fn to_otp_rows(&self) -> Vec<u16> {
+    pub(crate) fn to_otp_rows(&self) -> Vec<u16> {
         // First (re-)validate
         self.validate();
 
@@ -693,7 +1016,7 @@ impl WhiteLabelStruct {
         rows
     }
 
-    /// Creates a WhiteLabelStruct from the provided OTP rows.
+    /// Return a WhiteLabelStruct from the provided OTP rows.
     ///
     /// # Args
     /// - `usb_boot_flags`: The USB_BOOT_FLAGS value stored in OTP.  This
@@ -714,10 +1037,12 @@ impl WhiteLabelStruct {
     /// - The rows length is less than the minimum required to store the
     ///   struct fields, so callers should ensure the slice is at least
     ///   [`NUM_INDEX_ROWS`] long.
-    pub fn from_otp(usb_boot_flags: u32, rows: &[u16]) -> Result<OtpParseResult, Error> {
+    pub(crate) fn parse_otp(usb_boot_flags: u32, rows: &[u16]) -> Result<OtpParseResult, Error> {
         // Validate we have at least the struct fields
         if rows.len() < NUM_INDEX_ROWS {
-            return Err(Error::TooFewRows(NUM_INDEX_ROWS));
+            return Err(Error::InternalInconsistency(format!(
+                "Too few rows provided"
+            )));
         }
 
         let mut warnings = Vec::new();
@@ -747,11 +1072,11 @@ impl WhiteLabelStruct {
             NUM_U16_ROWS, 5,
             "Expected 5 u16 fields in white label struct"
         );
-        let vendor_id = extract_u16_field(rows, usb_boot_flags, "usb_vendor_id", &mut warnings);
-        let product_id = extract_u16_field(rows, usb_boot_flags, "usb_product_id", &mut warnings);
-        let bcd_device = extract_u16_field(rows, usb_boot_flags, "usb_bcd_device", &mut warnings);
-        let language_id = extract_u16_field(rows, usb_boot_flags, "usb_language_id", &mut warnings);
-        let attr_power = extract_u16_field(rows, usb_boot_flags, "usb_attr_power", &mut warnings);
+        let vendor_id = extract_u16_field(rows, usb_boot_flags, &FIELD_USB_VENDOR_ID, &mut warnings);
+        let product_id = extract_u16_field(rows, usb_boot_flags, &FIELD_USB_PRODUCT_ID, &mut warnings);
+        let bcd_device = extract_u16_field(rows, usb_boot_flags, &FIELD_USB_BCD_DEVICE, &mut warnings);
+        let language_id = extract_u16_field(rows, usb_boot_flags, &FIELD_USB_LANGUAGE_ID, &mut warnings);
+        let attr_power = extract_u16_field(rows, usb_boot_flags, &FIELD_USB_ATTR_POWER, &mut warnings);
 
         // Check we have enough rows for the strings indicated by the boot flags
         let expected_total_row_count = NUM_INDEX_ROWS + {
@@ -782,7 +1107,7 @@ impl WhiteLabelStruct {
                 manufacturer: None,
                 product: None,
                 serial_number: None,
-                attr_power: attr_power,
+                attr_power,
                 volume_label: None,
                 scsi_vendor: None,
                 scsi_product: None,
@@ -791,6 +1116,7 @@ impl WhiteLabelStruct {
                 redirect_name: None,
                 uf2_model: None,
                 uf2_board_id: None,
+                warnings: warnings.clone(),
             };
             wl.validate();
             let result = OtpParseResult {
@@ -808,48 +1134,54 @@ impl WhiteLabelStruct {
         let manufacturer = OtpString::from_otp_data(
             rows,
             usb_boot_flags,
-            "usb_manufacturer",
+            &FIELD_USB_MANUFACTURER,
             true,
             &mut warnings,
         )
         .expect("Manufacturer string parsing failed");
         let product =
-            OtpString::from_otp_data(rows, usb_boot_flags, "usb_product", true, &mut warnings)
-                .expect("Product string parsing failed");
+            OtpString::from_otp_data(
+                rows,
+                usb_boot_flags,
+                &FIELD_USB_PRODUCT,
+                true,
+                &mut warnings,
+            )
+            .expect("Product string parsing failed");
         let serial_number = OtpString::from_otp_data(
             rows,
             usb_boot_flags,
-            "usb_serial_number",
+            &FIELD_USB_SERIAL_NUMBER,
             true,
             &mut warnings,
         )
         .expect("Serial number string parsing failed");
         let volume_label =
-            OtpString::from_otp_data(rows, usb_boot_flags, "volume_label", false, &mut warnings)
+            OtpString::from_otp_data(rows, usb_boot_flags, &FIELD_VOLUME_LABEL, false, &mut warnings)
                 .expect("Volume label string parsing failed");
         let scsi_vendor =
-            OtpString::from_otp_data(rows, usb_boot_flags, "scsi_vendor", false, &mut warnings)
+            OtpString::from_otp_data(rows, usb_boot_flags, &FIELD_SCSI_VENDOR, false, &mut warnings)
                 .expect("SCSI vendor string parsing failed");
         let scsi_product =
-            OtpString::from_otp_data(rows, usb_boot_flags, "scsi_product", false, &mut warnings)
+            OtpString::from_otp_data(rows, usb_boot_flags, &FIELD_SCSI_PRODUCT, false, &mut warnings)
                 .expect("SCSI product string parsing failed");
         let scsi_version =
-            OtpString::from_otp_data(rows, usb_boot_flags, "scsi_version", false, &mut warnings)
+            OtpString::from_otp_data(rows, usb_boot_flags, &FIELD_SCSI_VERSION, false, &mut warnings)
                 .expect("SCSI version string parsing failed");
         let redirect_url =
-            OtpString::from_otp_data(rows, usb_boot_flags, "redirect_url", false, &mut warnings)
+            OtpString::from_otp_data(rows, usb_boot_flags, &FIELD_REDIRECT_URL, false, &mut warnings)
                 .expect("Redirect URL string parsing failed");
         let redirect_name =
-            OtpString::from_otp_data(rows, usb_boot_flags, "redirect_name", false, &mut warnings)
+            OtpString::from_otp_data(rows, usb_boot_flags, &FIELD_REDIRECT_NAME, false, &mut warnings)
                 .expect("Redirect name string parsing failed");
         let uf2_model =
-            OtpString::from_otp_data(rows, usb_boot_flags, "uf2_model", false, &mut warnings)
+            OtpString::from_otp_data(rows, usb_boot_flags, &FIELD_UF2_MODEL, false, &mut warnings)
                 .expect("UF2 model string parsing failed");
         let uf2_board_id =
-            OtpString::from_otp_data(rows, usb_boot_flags, "uf2_board_id", false, &mut warnings)
+            OtpString::from_otp_data(rows, usb_boot_flags, &FIELD_UF2_BOARD_ID, false, &mut warnings)
                 .expect("UF2 board ID string parsing failed");
 
-        let wl = Self {
+        let mut wl = Self {
             vendor_id,
             product_id,
             bcd_device,
@@ -866,11 +1198,14 @@ impl WhiteLabelStruct {
             redirect_name,
             uf2_model,
             uf2_board_id,
+            warnings: vec![],  // Set below
         };
 
         let actual_strings_row_count = wl.total_strdef_row_count();
         let expected_row_count = NUM_INDEX_ROWS + actual_strings_row_count;
-        if rows.len() != expected_row_count {
+
+        // Allow too much data, but not too little
+        if rows.len() < expected_row_count {
             warnings.push(format!(
                 "OTP rows length {} does not match expected {} based on actual string data",
                 rows.len(),
@@ -883,72 +1218,12 @@ impl WhiteLabelStruct {
         // checks it means our parsing logic is wrong, not the data.
         wl.validate();
 
+        wl.warnings = warnings.clone();
+
         Ok(OtpParseResult {
             white_label: wl,
             warnings,
         })
-    }
-
-    /// Similar to [`Self::from_otp`] but expects an entire ECC OTP memory
-    /// dump, and extracts the white label data from the location pointed to
-    /// by USB_WHITE_LABEL_DATA.
-    ///
-    /// Note that the USB_BOOT_FLAGS value must still be provided, as it is
-    /// not possible to reliably extract it from the OTP ECC dump - as it is
-    /// not stored as an ECC value.  It is expected that the caller will have
-    /// done any checking of the three copies of USB_BOOT_FLAGS to determine
-    /// the correct value to use.
-    /// 
-    /// If you want to ignore the lack of WHITE_LABEL_ADDR_VALID bit being
-    /// set, and proceed to parse the white label data anyway, set
-    /// `ignore_invalid_white_label_address` to true.
-    ///
-    /// Returns as [`Self::from_otp`].
-    pub fn from_complete_otp(
-        usb_boot_flags: u32,
-        otp_rows: &[u16],
-        ignore_invalid_white_label_address: bool,
-    ) -> Result<OtpParseResult, Error> {
-        if otp_rows.len() < TOTAL_OTP_ROWS {
-            return Err(Error::TooFewRows(TOTAL_OTP_ROWS));
-        }
-        if otp_rows.len() > TOTAL_OTP_ROWS {
-            return Err(Error::TooManyRows(TOTAL_OTP_ROWS));
-        }
-
-        let mut warnings = Vec::new();
-
-        // Check the WHITE_LABEL_ADDR_VALID bit is set
-        if (usb_boot_flags & (1 << WHITE_LABEL_ADDR_VALID_BIT_NUM)) == 0 {
-            if !ignore_invalid_white_label_address {
-               warnings.push(format!(
-                    "USB_BOOT_FLAGS bit {WHITE_LABEL_ADDR_VALID_BIT_NUM} (WHITE_LABEL_ADDR_VALID) is not set - white label address may be invalid",
-                ));
-            } else {
-                return Err(Error::InvalidWhiteLabelAddress);
-            }
-        }
-
-        // Find row USB_WHITE_LABEL_DATA points to - this is where the white
-        // label struct is stored.
-        assert!((OTP_ROW_USB_WHITE_LABEL_DATA as usize) < TOTAL_OTP_ROWS);
-        let usb_white_label_data_addr = otp_rows[OTP_ROW_USB_WHITE_LABEL_DATA as usize];
-        let wl_addr = usb_white_label_data_addr as usize;
-        if wl_addr >= (TOTAL_OTP_ROWS - 16) {
-            return Err(Error::InvalidWhiteLabelAddressValue(
-                usb_white_label_data_addr,
-            ));
-        }
-
-        assert!(wl_addr + NUM_INDEX_ROWS <= TOTAL_OTP_ROWS);
-
-        let rows = &otp_rows[wl_addr..];
-        Self::from_otp(usb_boot_flags, rows)
-            .map(|mut r| {
-                // Add on any warnings from this function
-                r.warnings.extend(warnings);
-                r
-            })
     }
 }
 
@@ -990,15 +1265,25 @@ fn write_otp_string_rows(
 
 /// Result of parsing OTP white label data.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OtpParseResult {
-    pub white_label: WhiteLabelStruct,
-    pub warnings: Vec<String>,
+pub(crate) struct OtpParseResult {
+    white_label: WhiteLabelStruct,
+    warnings: Vec<String>,
 }
 
 impl OtpParseResult {
     /// Returns false if there were any warnings during parsing.
-    pub fn is_clean(&self) -> bool {
+    pub(crate) fn is_clean(&self) -> bool {
         self.warnings.is_empty()
+    }
+
+    /// Returns the [`WhiteLabelStruct`].
+    pub(crate) fn white_label(&self) -> &WhiteLabelStruct {
+        &self.white_label
+    }
+
+    /// Returns any warnings generated during parsing.
+    pub(crate) fn warnings(&self) -> &Vec<String> {
+        &self.warnings
     }
 }
 
@@ -1009,14 +1294,10 @@ impl OtpParseResult {
 fn extract_u16_field(
     rows: &[u16],
     usb_boot_flags: u16,
-    field_name: &str,
+    field: &Field,
     warnings: &mut Vec<String>,
 ) -> Option<u16> {
-    let index = FIELD_NAMES
-        .iter()
-        .position(|&name| name == field_name)
-        .ok_or_else(|| format!("Invalid field name: {}", field_name))
-        .unwrap(); // safe unwrap as FIELD_NAMES is static
+    let index = field.index();
 
     let bit_set = (usb_boot_flags & (1 << index)) != 0;
     let value = rows[index];
@@ -1030,7 +1311,7 @@ fn extract_u16_field(
         if value != 0 {
             warnings.push(format!(
                 "{}: boot flag bit {} clear but row contains non-zero value 0x{:04X}",
-                field_name, index, value
+                field.name(), index, value
             ));
         }
         None
@@ -1068,7 +1349,7 @@ mod tests {
         );
 
         // Now convert back again
-        let new_wl = WhiteLabelStruct::from_otp(usb_boot_flags, &otp_rows);
+        let new_wl = WhiteLabelStruct::parse_otp(usb_boot_flags, &otp_rows);
         assert!(new_wl.is_ok());
 
         // Check no warnings
@@ -1095,20 +1376,22 @@ mod tests {
             "json/test/complete.json",
         ];
         for file in json_files.iter() {
-            let json = std::fs::read_to_string(file)
-                .expect(&format!("Failed to read JSON file {}", file));
-            let orig_json: serde_json::Value = serde_json::from_str(&json).expect(&format!(
-                "Failed to parse JSON file {}",
-                file
-            ));
+            let json =
+                std::fs::read_to_string(file).expect(&format!("Failed to read JSON file {}", file));
+            let orig_json: serde_json::Value =
+                serde_json::from_str(&json).expect(&format!("Failed to parse JSON file {}", file));
             let wl = WhiteLabelStruct::from_json(&json);
             assert!(wl.is_ok(), "Failed to parse JSON file {}", file);
             let wl = wl.unwrap();
 
             let usb_boot_flags = wl.usb_boot_flags();
             let otp_rows = wl.to_otp_rows();
-            let new_wl = WhiteLabelStruct::from_otp(usb_boot_flags, &otp_rows);
-            assert!(new_wl.is_ok(), "Failed to parse OTP rows from file {}", file);
+            let new_wl = WhiteLabelStruct::parse_otp(usb_boot_flags, &otp_rows);
+            assert!(
+                new_wl.is_ok(),
+                "Failed to parse OTP rows from file {}",
+                file
+            );
             let new_wl = new_wl.unwrap();
             assert!(
                 new_wl.is_clean(),
@@ -1123,7 +1406,7 @@ mod tests {
             );
 
             // Turn the OTP rows back into JSON and check it matches
-            let wl2 = WhiteLabelStruct::from_otp(usb_boot_flags, &otp_rows)
+            let wl2 = WhiteLabelStruct::parse_otp(usb_boot_flags, &otp_rows)
                 .expect(&format!("Failed to parse OTP rows from file {}", file))
                 .white_label;
             let new_json = wl2.to_json().expect(&format!(
@@ -1136,7 +1419,6 @@ mod tests {
                 file
             );
         }
-
     }
 
     #[test]
@@ -1164,7 +1446,7 @@ mod tests {
         );
 
         // Now convert back again
-        let new_wl = WhiteLabelStruct::from_otp(usb_boot_flags, &otp_rows);
+        let new_wl = WhiteLabelStruct::parse_otp(usb_boot_flags, &otp_rows);
         assert!(new_wl.is_ok());
 
         // Check no warnings
@@ -1194,7 +1476,7 @@ mod tests {
             "USB boot flags do not match expected value"
         );
         let otp_rows = wl.to_otp_rows();
-        let new_wl = WhiteLabelStruct::from_otp(usb_boot_flags, &otp_rows);
+        let new_wl = WhiteLabelStruct::parse_otp(usb_boot_flags, &otp_rows);
         assert!(new_wl.is_ok());
         let new_wl = new_wl.unwrap();
         assert!(
@@ -1225,7 +1507,7 @@ mod tests {
             16,
             "OTP row count does not match expected value"
         );
-        let new_wl = WhiteLabelStruct::from_otp(usb_boot_flags, &otp_rows);
+        let new_wl = WhiteLabelStruct::parse_otp(usb_boot_flags, &otp_rows);
         assert!(new_wl.is_ok());
         let new_wl = new_wl.unwrap();
         assert!(
@@ -1247,22 +1529,22 @@ mod tests {
     }
 
     const OTP_ROWS_COMPLETE_CONFIG: [u16; 75] = [
-            0x1234, 0x4678, 0x0100, 0x0409, 0x100B, 0x1608, 0x1A08, 0xFA80, 0x1E0B, 0x2408, 0x2808,
-            0x2C04, 0x2E14, 0x380B, 0x3E08, 0x4211, 0x6970, 0x7265, 0x2E73, 0x6F72, 0x6B63, 0x0073,
-            0x6970, 0x6F63, 0x6F2D, 0x7074, 0x3231, 0x3433, 0x6261, 0x6463, 0x4950, 0x5245, 0x2E53,
-            0x4F52, 0x4B43, 0x0053, 0x6970, 0x7265, 0x7273, 0x736B, 0x6970, 0x6F63, 0x6F2D, 0x7074,
-            0x3176, 0x3332, 0x7468, 0x7074, 0x3A73, 0x2F2F, 0x6970, 0x7265, 0x2E73, 0x6F72, 0x6B63,
-            0x2F73, 0x6970, 0x7265, 0x2E73, 0x6F72, 0x6B63, 0x0073, 0x6970, 0x6F63, 0x6F2D, 0x7074,
-            0x6970, 0x6F63, 0x6F2D, 0x7074, 0x6220, 0x616F, 0x6472, 0x6920, 0x0064,
-        ];
+        0x1234, 0x4678, 0x0100, 0x0409, 0x100B, 0x1608, 0x1A08, 0xFA80, 0x1E0B, 0x2408, 0x2808,
+        0x2C04, 0x2E14, 0x380B, 0x3E08, 0x4211, 0x6970, 0x7265, 0x2E73, 0x6F72, 0x6B63, 0x0073,
+        0x6970, 0x6F63, 0x6F2D, 0x7074, 0x3231, 0x3433, 0x6261, 0x6463, 0x4950, 0x5245, 0x2E53,
+        0x4F52, 0x4B43, 0x0053, 0x6970, 0x7265, 0x7273, 0x736B, 0x6970, 0x6F63, 0x6F2D, 0x7074,
+        0x3176, 0x3332, 0x7468, 0x7074, 0x3A73, 0x2F2F, 0x6970, 0x7265, 0x2E73, 0x6F72, 0x6B63,
+        0x2F73, 0x6970, 0x7265, 0x2E73, 0x6F72, 0x6B63, 0x0073, 0x6970, 0x6F63, 0x6F2D, 0x7074,
+        0x6970, 0x6F63, 0x6F2D, 0x7074, 0x6220, 0x616F, 0x6472, 0x6920, 0x0064,
+    ];
 
-        #[test]
+    #[test]
     fn test_from_otp_data() {
-            // From parsig json/test/complete.json
-            let row_data = OTP_ROWS_COMPLETE_CONFIG;
-            let usb_boot_flags = 0x0040_ffff;
+        // From parsig json/test/complete.json
+        let row_data = OTP_ROWS_COMPLETE_CONFIG;
+        let usb_boot_flags = 0x0040_ffff;
 
-        let parse_result = WhiteLabelStruct::from_otp(usb_boot_flags, &row_data);
+        let parse_result = WhiteLabelStruct::parse_otp(usb_boot_flags, &row_data);
         assert!(parse_result.is_ok(), "Expected successful parsing");
         let parse_result = parse_result.unwrap();
         assert!(
@@ -1292,8 +1574,7 @@ mod tests {
         let new_json = serde_json::to_value(regenerated_wling).unwrap();
         let orig_json = serde_json::from_str::<serde_json::Value>(json).unwrap();
         assert_eq!(
-            orig_json,
-            new_json,
+            orig_json, new_json,
             "Regenerated JSON does not match original"
         );
     }
@@ -1302,19 +1583,13 @@ mod tests {
     fn test_from_otp_data_warnings() {
         // From parsig json/test/complete.json
         let row_data = OTP_ROWS_COMPLETE_CONFIG;
-        let usb_boot_flags = 0x0000_ffff;  // No addr valid flag
-        let parse_result = WhiteLabelStruct::from_otp(usb_boot_flags, &row_data);
+        let usb_boot_flags = 0x0000_ffff; // No addr valid flag
+        let parse_result = WhiteLabelStruct::parse_otp(usb_boot_flags, &row_data);
         assert!(parse_result.is_ok(), "Expected successful parsing");
         let parse_result = parse_result.unwrap();
-        assert!(
-            !parse_result.is_clean(),
-            "Expected warnings during parsing"
-        );
+        assert!(!parse_result.is_clean(), "Expected warnings during parsing");
         let warnings = parse_result.warnings;
-        assert_eq!(
-            warnings.len(), 1,
-            "Expected one warning during parsing"
-        );
+        assert_eq!(warnings.len(), 1, "Expected one warning during parsing");
         assert!(
             warnings[0].contains("WHITE_LABEL_ADDR_VALID"),
             "Expected WHITE_LABEL_ADDR_VALID warning"

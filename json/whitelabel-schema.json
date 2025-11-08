@@ -11,11 +11,13 @@
             "properties": {
                 "vid": {
                     "description": "Vendor ID",
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]{4}$"
                 },
                 "pid": {
                     "description": "Product ID",
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]{4}$"
                 },
                 "bcd": {
                     "description": "Device Revision",
@@ -25,7 +27,8 @@
                 },
                 "lang_id": {
                     "description": "Language ID",
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]{4}$"
                 },
                 "manufacturer": {
                     "description": "Manufacturer Name (can contain unicode)",
@@ -45,13 +48,15 @@
                 "max_power": {
                     "description": "Max power consumption, in 2mA units",
                     "type": ["integer", "string"],
-                    "maximum": 255
+                    "maximum": 255,
+                    "pattern": "^0x[0-9a-fA-F]{1,2}$"
                 },
                 "attributes": {
                     "description": "Device attributes: bit 7 must be 1, bit 6 is self-powered, bit 5 is remote wakeup, bits 0-4 must be 0",
                     "type": ["integer", "string"],
                     "minimum": 128,
-                    "maximum": 224
+                    "maximum": 224,
+                    "pattern": "^0x[8aceACE]{1}0$"
                 }
             },
             "dependentRequired": {

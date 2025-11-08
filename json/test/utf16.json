@@ -1,5 +1,5 @@
 {
-    "$schema": "https://raw.githubusercontent.com/raspberrypi/picotool/develop/json/schemas/whitelabel-schema.json",
+    "$schema": "https://raw.githubusercontent.com/piersfinlayson/pico-otp/main/json/whitelabel-schema.json",
     "device": {
         "manufacturer": "😀piers.rocks",
         "product": "pico⚡otp",
