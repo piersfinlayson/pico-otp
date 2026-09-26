@@ -3,7 +3,8 @@
 // MIT License
 
 // This file was mostly auto-generated from `/json/whitelabel-schema.json`
-// using the commented out `process_wl_schema()` in `/build.rs`.
+// using `cargo run --example generate-whitelabel`, which prints the
+// generated code to stdout.
 //
 // Before re-generating, remove the "pattern" lines from the JSON schema, as
 // these will not generate working `no_std` compatible code.

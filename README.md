@@ -46,7 +46,7 @@ In addition, it useful to have a well commented and thoroughly tested parallel i
 ## Command Line Tool - Example Usage 
 
 ```sh
-cargo run --bin pico-otp -- -i json/sample-wl.json -o /tmp/otp.bin
+cargo run --bin pico-otp -- -j json/sample-wl.json -o /tmp/otp.bin
 ```
 
 Sample output:
@@ -93,13 +93,14 @@ let usb_boot_flags = otp_data.usb_boot_flags();
 - Encodes white label data into OTP ECC rows as human readable or binary data
 - Decodes OTP data read from existing white labelled device back into JSON format
 - Handles ASCII and UTF-16 USB strings encoding, including UTF-16 surrogates (like 😀)
-- `no-std` support, for use in WASM and embedded environments
+- Calculates the 24 bits an OTP row holds for a value written with ECC
+- `no-std` support with default features off, for use in WASM and embedded environments
 - Command line tool provided for generating OTP data from JSON files
 - Comprehensive unit tests to ensure correctness of data encoding and decoding
 
 ## Technical Details
 
-See the [Technical Overview](TECHNICAL.md) file for more information on the technical details of RP2350 One Time Programmable memory.
+See the [Technical Overview](docs/TECHNICAL.md) file for more information on the technical details of RP2350 One Time Programmable memory.
 
 See the [USB White Labelling](docs/USB.md) document for more information on the RP2350's USB white labelling specifically.
 

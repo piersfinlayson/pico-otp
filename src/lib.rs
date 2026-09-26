@@ -21,8 +21,8 @@
 //! It can also be used to decode OTP binary data back into native Rust objects
 //! and Raspberry Pi's standard USB white labelling JSON schema.
 //!
-//! It is `no_std` compatible, making it suitable for WASM, embedded and other
-//! minimal environments.
+//! It is `no_std` compatible with default features off, making it suitable
+//! for WASM, embedded and other minimal environments.
 //!
 //! It is used by [`pico⚡flash`](https://picoflash.org) to apply whitelabelling
 //! configurations to Raspberry Pi Pico 2 and other RP2350 devices.
@@ -33,7 +33,8 @@
 //! - Parses and validates OTP binary data dumps, extracting whitelabel
 //!   information.
 //! - Supports `picotool` whitelabel schema.
-//! - `no_std` compatible (requires `alloc`).
+//! - Calculates the 24 bits an OTP row holds for a value written with ECC.
+//! - `no_std` compatible with default features off (requires `alloc`).
 //!
 //! # Example - JSON fragment to OTP data
 //!
@@ -139,6 +140,9 @@ extern crate alloc;
 
 pub mod whitelabel;
 pub use whitelabel::{Error as WhiteLabelError, OtpData, WhiteLabelStruct};
+
+mod ecc;
+pub use ecc::ecc_encode;
 
 #[cfg(test)]
 mod tests {

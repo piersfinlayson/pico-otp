@@ -24,6 +24,10 @@ jobs:
     - uses: actions/checkout@v4
     - name: Build crate
       run: cargo build --verbose
+    - name: Build library without std
+      run: |
+        rustup target add thumbv8m.main-none-eabihf
+        cargo build --lib --no-default-features --target thumbv8m.main-none-eabihf --verbose
     - name: Build examples
       run: cargo build --examples --verbose
     - name: Run tests
