@@ -19,12 +19,12 @@ fn usage() {
 
 fn run(args: &Args) -> i32 {
     if args.json_file.is_some() {
-        return process_json(&args);
+        process_json(args)
     } else if args.otp_dump_file.is_some() {
-        return process_otp_dump(&args);
+        process_otp_dump(args)
     } else {
         usage();
-        return 1;
+        1
     }
 }
 
@@ -173,7 +173,7 @@ fn process_json(args: &Args) -> i32 {
         println!("Total OTP row count: {}", otp_rows.len());
 
         // Print OTP rows in hex as u16s
-        print!("OTP Rows - write at some offset, such as 0x100:\n");
+        println!("OTP Rows - write at some offset, such as 0x100:");
         for (ii, row) in otp_rows.iter().enumerate() {
             let row_index = ii + 0x100;
             println!("  {row_index:#05X}: {row:#06X}");

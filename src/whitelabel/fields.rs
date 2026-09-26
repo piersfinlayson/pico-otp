@@ -150,12 +150,10 @@ impl Field {
                 ));
             }
 
-            if !self.supports_utf16() {
-                if !value.is_ascii() {
-                    return Err(format!(
-                        "Field '{field_name}' contains non-ASCII characters",
-                    ));
-                }
+            if !self.supports_utf16() && !value.is_ascii() {
+                return Err(format!(
+                    "Field '{field_name}' contains non-ASCII characters",
+                ));
             }
         }
 

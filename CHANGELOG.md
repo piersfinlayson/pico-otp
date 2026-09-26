@@ -6,6 +6,7 @@
     - Default USB attributes to 0x80 if power but attributes not provided.
     - Default max power to 0xfa (500mA) if attributes but max power not provided.
 - Fixed `no_std` builds by moving the command line tool and its `clap` dependency behind the default `cli` feature. For `no_std`, set `default-features = false`.
+- Fixed decoding and `to_json()` panicking on bad white label data read from a device. Strict decoding now returns an error. Non-strict decoding drops the bad field with a warning.
 - Added `ecc_encode()`, which returns the 24 bits an OTP row holds when a 16-bit value is written with ECC.
 - Removed the unused `schemars` dependency and build script, so dependents compile fewer crates.
 - Now requires Rust 1.88, for let chains.

@@ -11,6 +11,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::str::FromStr;
 
+use crate::whitelabel::auto::error::ConversionError;
 use crate::whitelabel::auto::{
     WhiteLabellingDeviceAttributes, WhiteLabellingDeviceManufacturer, WhiteLabellingDeviceMaxPower,
     WhiteLabellingDeviceProduct, WhiteLabellingDeviceSerialNumber,
@@ -43,7 +44,7 @@ const NUM_STRDEF_ROWS: usize = 11;
 // Indices of the STRDEF rows in the white label struct.
 const STRDEF_ROWS: [usize; NUM_STRDEF_ROWS] = [4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15];
 // Total number of rows in the white label struct.
-const NUM_INDEX_ROWS: usize = NUM_U16_ROWS + NUM_STRDEF_ROWS;
+pub(crate) const NUM_INDEX_ROWS: usize = NUM_U16_ROWS + NUM_STRDEF_ROWS;
 // White label address value valid bit index within the USB_BOOT_FLAGS
 pub(crate) const WHITE_LABEL_ADDR_VALID_BIT_NUM: usize = 22;
 // DP/DM Swap bit index within the USB_BOOT_FLAGS
@@ -106,8 +107,10 @@ pub struct WhiteLabelStruct {
     warnings: Vec<String>,
 }
 
-impl From<WhiteLabelStruct> for WhiteLabellingDevice {
-    fn from(wls: WhiteLabelStruct) -> Self {
+impl TryFrom<WhiteLabelStruct> for WhiteLabellingDevice {
+    type Error = Error;
+
+    fn try_from(wls: WhiteLabelStruct) -> Result<Self, Self::Error> {
         let mut device = WhiteLabellingDevice::default();
 
         let vid = wls.vendor_id.as_ref().map(|v| format!("{:#06x}", v));
@@ -120,17 +123,12 @@ impl From<WhiteLabelStruct> for WhiteLabellingDevice {
             integer as f64 + (tenths as f64 / 10.0) + (hundredths as f64 / 100.0)
         });
         let lang_id = wls.language_id.as_ref().map(|v| format!("{:#06x}", v));
-        let manufacturer = wls.manufacturer.as_ref().map(|s| {
-            WhiteLabellingDeviceManufacturer::from_str(&s.to_string())
-                .expect("Invalid manufacturer string")
-        });
-        let product = wls.product.as_ref().map(|s| {
-            WhiteLabellingDeviceProduct::from_str(&s.to_string()).expect("Invalid product string")
-        });
-        let serial_number = wls.serial_number.as_ref().map(|s| {
-            WhiteLabellingDeviceSerialNumber::from_str(&s.to_string())
-                .expect("Invalid serial number string")
-        });
+        let manufacturer: Option<WhiteLabellingDeviceManufacturer> =
+            json_string(wls.manufacturer.as_ref(), &FIELD_USB_MANUFACTURER)?;
+        let product: Option<WhiteLabellingDeviceProduct> =
+            json_string(wls.product.as_ref(), &FIELD_USB_PRODUCT)?;
+        let serial_number: Option<WhiteLabellingDeviceSerialNumber> =
+            json_string(wls.serial_number.as_ref(), &FIELD_USB_SERIAL_NUMBER)?;
         let attributes = wls.attr_power.as_ref().map(|v| {
             WhiteLabellingDeviceAttributes::String(format!("{:#04x}", ((*v & 0xFF) as u8)))
         });
@@ -148,57 +146,47 @@ impl From<WhiteLabelStruct> for WhiteLabellingDevice {
         device.attributes = attributes;
         device.max_power = max_power;
 
-        device
+        Ok(device)
     }
 }
 
-impl From<WhiteLabelStruct> for WhiteLabellingScsi {
-    fn from(wls: WhiteLabelStruct) -> Self {
+impl TryFrom<WhiteLabelStruct> for WhiteLabellingScsi {
+    type Error = Error;
+
+    fn try_from(wls: WhiteLabelStruct) -> Result<Self, Self::Error> {
         let mut scsi = WhiteLabellingScsi::default();
 
-        let vendor = wls.scsi_vendor.as_ref().map(|s| {
-            WhiteLabellingScsiVendor::from_str(&s.to_string()).expect("Invalid SCSI vendor string")
-        });
-        let product = wls.scsi_product.as_ref().map(|s| {
-            WhiteLabellingScsiProduct::from_str(&s.to_string())
-                .expect("Invalid SCSI product string")
-        });
-        let version = wls.scsi_version.as_ref().map(|s| {
-            WhiteLabellingScsiVersion::from_str(&s.to_string())
-                .expect("Invalid SCSI version string")
-        });
+        let vendor: Option<WhiteLabellingScsiVendor> =
+            json_string(wls.scsi_vendor.as_ref(), &FIELD_SCSI_VENDOR)?;
+        let product: Option<WhiteLabellingScsiProduct> =
+            json_string(wls.scsi_product.as_ref(), &FIELD_SCSI_PRODUCT)?;
+        let version: Option<WhiteLabellingScsiVersion> =
+            json_string(wls.scsi_version.as_ref(), &FIELD_SCSI_VERSION)?;
 
         scsi.vendor = vendor;
         scsi.product = product;
         scsi.version = version;
 
-        scsi
+        Ok(scsi)
     }
 }
 
-impl From<WhiteLabelStruct> for WhiteLabellingVolume {
-    fn from(wls: WhiteLabelStruct) -> Self {
+impl TryFrom<WhiteLabelStruct> for WhiteLabellingVolume {
+    type Error = Error;
+
+    fn try_from(wls: WhiteLabelStruct) -> Result<Self, Self::Error> {
         let mut volume = WhiteLabellingVolume::default();
 
-        let label = wls.volume_label.as_ref().map(|s| {
-            WhiteLabellingVolumeLabel::from_str(&s.to_string())
-                .expect("Invalid volume label string")
-        });
-        let model = wls.uf2_model.as_ref().map(|s| {
-            WhiteLabellingVolumeModel::from_str(&s.to_string()).expect("Invalid UF2 model string")
-        });
-        let board_id = wls.uf2_board_id.as_ref().map(|s| {
-            WhiteLabellingVolumeBoardId::from_str(&s.to_string())
-                .expect("Invalid UF2 board ID string")
-        });
-        let redirect_name = wls.redirect_name.as_ref().map(|s| {
-            WhiteLabellingVolumeRedirectName::from_str(&s.to_string())
-                .expect("Invalid redirect name string")
-        });
-        let redirect_url = wls.redirect_url.as_ref().map(|s| {
-            WhiteLabellingVolumeRedirectUrl::from_str(&s.to_string())
-                .expect("Invalid redirect URL string")
-        });
+        let label: Option<WhiteLabellingVolumeLabel> =
+            json_string(wls.volume_label.as_ref(), &FIELD_VOLUME_LABEL)?;
+        let model: Option<WhiteLabellingVolumeModel> =
+            json_string(wls.uf2_model.as_ref(), &FIELD_UF2_MODEL)?;
+        let board_id: Option<WhiteLabellingVolumeBoardId> =
+            json_string(wls.uf2_board_id.as_ref(), &FIELD_UF2_BOARD_ID)?;
+        let redirect_name: Option<WhiteLabellingVolumeRedirectName> =
+            json_string(wls.redirect_name.as_ref(), &FIELD_REDIRECT_NAME)?;
+        let redirect_url: Option<WhiteLabellingVolumeRedirectUrl> =
+            json_string(wls.redirect_url.as_ref(), &FIELD_REDIRECT_URL)?;
 
         volume.label = label;
         volume.model = model;
@@ -206,20 +194,20 @@ impl From<WhiteLabelStruct> for WhiteLabellingVolume {
         volume.redirect_name = redirect_name;
         volume.redirect_url = redirect_url;
 
-        volume
+        Ok(volume)
     }
 }
 
-impl From<WhiteLabelStruct> for WhiteLabelling {
-    fn from(wls: WhiteLabelStruct) -> Self {
-        let mut wl = WhiteLabelling::default();
+impl TryFrom<WhiteLabelStruct> for WhiteLabelling {
+    type Error = Error;
 
-        wl.schema = Some(serde_json::Value::String(
+    fn try_from(wls: WhiteLabelStruct) -> Result<Self, Self::Error> {
+        let schema = Some(serde_json::Value::String(
             WHITE_LABEL_SCHEMA_URL.to_string(),
         ));
 
         // Only create device if any device fields are present
-        if wls.vendor_id.is_some()
+        let device = if wls.vendor_id.is_some()
             || wls.product_id.is_some()
             || wls.bcd_device.is_some()
             || wls.language_id.is_some()
@@ -228,28 +216,54 @@ impl From<WhiteLabelStruct> for WhiteLabelling {
             || wls.serial_number.is_some()
             || wls.attr_power.is_some()
         {
-            wl.device = Some(WhiteLabellingDevice::from(wls.clone()));
-        }
+            Some(WhiteLabellingDevice::try_from(wls.clone())?)
+        } else {
+            None
+        };
 
         // Only create scsi if any scsi fields are present
-        if wls.scsi_vendor.is_some() || wls.scsi_product.is_some() || wls.scsi_version.is_some() {
-            wl.scsi = Some(WhiteLabellingScsi::from(wls.clone()));
-        }
+        let scsi = if wls.scsi_vendor.is_some()
+            || wls.scsi_product.is_some()
+            || wls.scsi_version.is_some()
+        {
+            Some(WhiteLabellingScsi::try_from(wls.clone())?)
+        } else {
+            None
+        };
 
         // Only create volume if any volume fields are present
-        if wls.volume_label.is_some()
+        let volume = if wls.volume_label.is_some()
             || wls.uf2_model.is_some()
             || wls.uf2_board_id.is_some()
             || wls.redirect_name.is_some()
             || wls.redirect_url.is_some()
         {
-            wl.volume = Some(WhiteLabellingVolume::from(wls.clone()));
+            Some(WhiteLabellingVolume::try_from(wls.clone())?)
         } else {
-            wl.volume = None;
-        }
+            None
+        };
 
-        wl
+        Ok(WhiteLabelling {
+            device,
+            schema,
+            scsi,
+            volume,
+        })
     }
+}
+
+// Converts a string field to its JSON type.  The JSON type enforces the
+// schema's maximum length so converting a longer string returns an error.
+fn json_string<T>(string: Option<&OtpString>, field: &Field) -> Result<Option<T>, Error>
+where
+    T: FromStr<Err = ConversionError>,
+{
+    string
+        .map(|s| {
+            T::from_str(s.string())
+                .map_err(|e| Error::InvalidWhiteLabelData(format!("{}: {e}", field.name())))
+        })
+        .transpose()
 }
 
 /// Converts OtpData into a WhiteLabelStruct.
@@ -298,8 +312,11 @@ impl WhiteLabelStruct {
     }
 
     /// Creates a JSON representation of this WhiteLabelStruct.
+    ///
+    /// Returns [`Error::InvalidWhiteLabelData`] where a setter has accepted a
+    /// string longer than the JSON schema allows.
     pub fn to_json(&self) -> Result<serde_json::Value, Error> {
-        let wl = WhiteLabelling::from(self.clone());
+        let wl = WhiteLabelling::try_from(self.clone())?;
         let result = serde_json::to_value(&wl)?;
         Ok(result)
     }
@@ -321,7 +338,7 @@ impl WhiteLabelStruct {
     fn validate_fields(&mut self) {
         self.warnings = vec![];
         for field in FIELDS {
-            match field.validate(&self) {
+            match field.validate(self) {
                 Ok(_) => {}
                 Err(e) => {
                     self.warnings.push(e);
@@ -1022,12 +1039,13 @@ impl WhiteLabelStruct {
     /// - The rows length is less than the minimum required to store the
     ///   struct fields, so callers should ensure the slice is at least
     ///   [`NUM_INDEX_ROWS`] long.
+    /// - A string extracted from the rows fails an internal sanity check.
     pub(crate) fn parse_otp(usb_boot_flags: u32, rows: &[u16]) -> Result<OtpParseResult, Error> {
         // Validate we have at least the struct fields
         if rows.len() < NUM_INDEX_ROWS {
-            return Err(Error::InternalInconsistency(format!(
-                "Too few rows provided"
-            )));
+            return Err(Error::InternalInconsistency(
+                "Too few rows provided".to_string(),
+            ));
         }
 
         let mut warnings = Vec::new();
@@ -1045,9 +1063,7 @@ impl WhiteLabelStruct {
             ));
         }
         if (usb_boot_flags & 0xFF1F0000) != 0 {
-            warnings.push(format!(
-                "USB_BOOT_FLAGS has invalid bits set - ignoring these",
-            ));
+            warnings.push("USB_BOOT_FLAGS has invalid bits set - ignoring these".to_string());
         }
         // Now take the bottom 16 bits only
         let usb_boot_flags = (usb_boot_flags & 0x0000FFFF) as u16;
@@ -1117,8 +1133,8 @@ impl WhiteLabelStruct {
         }
 
         // Extract string fields
-        assert!(
-            NUM_STRDEF_ROWS == 11,
+        assert_eq!(
+            NUM_STRDEF_ROWS, 11,
             "Expected 11 STRDEF fields in white label struct"
         );
         let manufacturer = OtpString::from_otp_data(
@@ -1127,83 +1143,72 @@ impl WhiteLabelStruct {
             &FIELD_USB_MANUFACTURER,
             true,
             &mut warnings,
-        )
-        .expect("Manufacturer string parsing failed");
+        )?;
         let product = OtpString::from_otp_data(
             rows,
             usb_boot_flags,
             &FIELD_USB_PRODUCT,
             true,
             &mut warnings,
-        )
-        .expect("Product string parsing failed");
+        )?;
         let serial_number = OtpString::from_otp_data(
             rows,
             usb_boot_flags,
             &FIELD_USB_SERIAL_NUMBER,
             true,
             &mut warnings,
-        )
-        .expect("Serial number string parsing failed");
+        )?;
         let volume_label = OtpString::from_otp_data(
             rows,
             usb_boot_flags,
             &FIELD_VOLUME_LABEL,
             false,
             &mut warnings,
-        )
-        .expect("Volume label string parsing failed");
+        )?;
         let scsi_vendor = OtpString::from_otp_data(
             rows,
             usb_boot_flags,
             &FIELD_SCSI_VENDOR,
             false,
             &mut warnings,
-        )
-        .expect("SCSI vendor string parsing failed");
+        )?;
         let scsi_product = OtpString::from_otp_data(
             rows,
             usb_boot_flags,
             &FIELD_SCSI_PRODUCT,
             false,
             &mut warnings,
-        )
-        .expect("SCSI product string parsing failed");
+        )?;
         let scsi_version = OtpString::from_otp_data(
             rows,
             usb_boot_flags,
             &FIELD_SCSI_VERSION,
             false,
             &mut warnings,
-        )
-        .expect("SCSI version string parsing failed");
+        )?;
         let redirect_url = OtpString::from_otp_data(
             rows,
             usb_boot_flags,
             &FIELD_REDIRECT_URL,
             false,
             &mut warnings,
-        )
-        .expect("Redirect URL string parsing failed");
+        )?;
         let redirect_name = OtpString::from_otp_data(
             rows,
             usb_boot_flags,
             &FIELD_REDIRECT_NAME,
             false,
             &mut warnings,
-        )
-        .expect("Redirect name string parsing failed");
+        )?;
         let uf2_model =
-            OtpString::from_otp_data(rows, usb_boot_flags, &FIELD_UF2_MODEL, false, &mut warnings)
-                .expect("UF2 model string parsing failed");
+            OtpString::from_otp_data(rows, usb_boot_flags, &FIELD_UF2_MODEL, false, &mut warnings)?;
         let uf2_board_id = OtpString::from_otp_data(
             rows,
             usb_boot_flags,
             &FIELD_UF2_BOARD_ID,
             false,
             &mut warnings,
-        )
-        .expect("UF2 board ID string parsing failed");
+        )?;
 
         let mut wl = Self {
             vendor_id,
@@ -1259,7 +1264,7 @@ impl WhiteLabelStruct {
 // correct location as indicated by the strdef row at strdef_row_index.
 fn write_otp_string_rows(
     otp_string: &OtpString,
-    rows: &mut Vec<u16>,
+    rows: &mut [u16],
     start_index: &mut usize,
     strdef_row_index: usize,
 ) {
@@ -1402,10 +1407,10 @@ mod tests {
             "json/test/complete.json",
         ];
         for file in json_files.iter() {
-            let json =
-                std::fs::read_to_string(file).expect(&format!("Failed to read JSON file {}", file));
-            let orig_json: serde_json::Value =
-                serde_json::from_str(&json).expect(&format!("Failed to parse JSON file {}", file));
+            let json = std::fs::read_to_string(file)
+                .unwrap_or_else(|_| panic!("Failed to read JSON file {}", file));
+            let orig_json: serde_json::Value = serde_json::from_str(&json)
+                .unwrap_or_else(|_| panic!("Failed to parse JSON file {}", file));
             let wl = WhiteLabelStruct::from_json(&json);
             assert!(wl.is_ok(), "Failed to parse JSON file {}", file);
             let wl = wl.unwrap();
@@ -1433,12 +1438,11 @@ mod tests {
 
             // Turn the OTP rows back into JSON and check it matches
             let wl2 = WhiteLabelStruct::parse_otp(usb_boot_flags, &otp_rows)
-                .expect(&format!("Failed to parse OTP rows from file {}", file))
+                .unwrap_or_else(|_| panic!("Failed to parse OTP rows from file {}", file))
                 .white_label;
-            let new_json = wl2.to_json().expect(&format!(
-                "Failed to convert white label to JSON for file {}",
-                file
-            ));
+            let new_json = wl2.to_json().unwrap_or_else(|_| {
+                panic!("Failed to convert white label to JSON for file {}", file)
+            });
             assert_eq!(
                 orig_json, new_json,
                 "Re-converted JSON does not match original for file {}",
@@ -1596,7 +1600,7 @@ mod tests {
         );
 
         // Back to JSON schema
-        let regenerated_wling = WhiteLabelling::from(wl);
+        let regenerated_wling = WhiteLabelling::try_from(wl).unwrap();
         let new_json = serde_json::to_value(regenerated_wling).unwrap();
         let orig_json = serde_json::from_str::<serde_json::Value>(json).unwrap();
         assert_eq!(
@@ -1620,5 +1624,149 @@ mod tests {
             warnings[0].contains("WHITE_LABEL_ADDR_VALID"),
             "Expected WHITE_LABEL_ADDR_VALID warning"
         );
+    }
+
+    // Returns USB boot flags and rows for a white label holding one string.
+    // The string starts straight after the struct.
+    fn one_string(field: &Field, utf16: bool, char_count: usize, data: &[u16]) -> (u32, Vec<u16>) {
+        let mut rows = vec![0; NUM_INDEX_ROWS];
+        let encoding = if utf16 { 0x80 } else { 0 };
+        rows[field.index()] = ((NUM_INDEX_ROWS as u16) << 8) | encoding | char_count as u16;
+        rows.extend_from_slice(data);
+        let flags = (1 << WHITE_LABEL_ADDR_VALID_BIT_NUM) | (1 << field.index());
+        (flags, rows)
+    }
+
+    // Packs bytes two to a row as an ASCII STRDEF holds them.  The first
+    // byte goes in the low byte.
+    fn ascii_rows(bytes: &[u8]) -> Vec<u16> {
+        bytes
+            .chunks(2)
+            .map(|pair| u16::from_le_bytes([pair[0], pair.get(1).copied().unwrap_or(0)]))
+            .collect()
+    }
+
+    // Decodes rows as a caller decodes rows read from a device.
+    fn decode(flags: u32, rows: &[u16], strict: bool) -> Result<WhiteLabelStruct, Error> {
+        let otp_data = OtpData::from_white_label_data(flags, rows, strict)?;
+        WhiteLabelStruct::try_from(&otp_data)
+    }
+
+    // Checks that strict decoding fails.  Non-strict decoding must drop the
+    // string with a warning and still convert to JSON.
+    fn check_dropped(flags: u32, rows: &[u16], warning: &str) {
+        assert!(matches!(
+            decode(flags, rows, true),
+            Err(Error::OtpDataError(_))
+        ));
+        let wls = decode(flags, rows, false).unwrap();
+        wls.to_json().unwrap();
+        assert!(
+            wls.warnings().iter().any(|w| w.contains(warning)),
+            "Expected warning '{warning}', got {:?}",
+            wls.warnings()
+        );
+        let expected = WhiteLabelStruct {
+            warnings: wls.warnings.clone(),
+            ..Default::default()
+        };
+        assert_eq!(wls, expected);
+    }
+
+    // A string longer than its field allows doesn't fit the JSON schema so
+    // decoding drops it.
+    #[test]
+    fn test_decode_string_too_long() {
+        let fields = [
+            FIELD_USB_MANUFACTURER,
+            FIELD_USB_PRODUCT,
+            FIELD_USB_SERIAL_NUMBER,
+            FIELD_VOLUME_LABEL,
+            FIELD_SCSI_VENDOR,
+            FIELD_SCSI_PRODUCT,
+            FIELD_SCSI_VERSION,
+        ];
+        for field in fields {
+            let max = field.max_length().unwrap();
+            let data = ascii_rows("a".repeat(max + 1).as_bytes());
+            let (flags, rows) = one_string(&field, false, max + 1, &data);
+            check_dropped(flags, &rows, "exceeds maximum");
+
+            // The longest string the field allows decodes cleanly
+            let data = ascii_rows("a".repeat(max).as_bytes());
+            let (flags, rows) = one_string(&field, false, max, &data);
+            decode(flags, &rows, true).unwrap().to_json().unwrap();
+        }
+    }
+
+    // An ASCII STRDEF's bytes must be ASCII even where they form valid
+    // UTF-8.
+    #[test]
+    fn test_decode_ascii_strdef_holding_utf8() {
+        let data = ascii_rows("é".as_bytes());
+        let (flags, rows) = one_string(&FIELD_USB_MANUFACTURER, false, 2, &data);
+        check_dropped(flags, &rows, "non-ASCII data in ASCII string");
+    }
+
+    // A UTF-16 string of only ASCII characters decodes as ASCII.
+    #[test]
+    fn test_decode_utf16_strdef_holding_ascii() {
+        for string in ["abc", ""] {
+            let data: Vec<u16> = string.encode_utf16().collect();
+            let (flags, rows) = one_string(&FIELD_USB_MANUFACTURER, true, data.len(), &data);
+            let wls = decode(flags, &rows, true).unwrap();
+            assert_eq!(wls.manufacturer().map(String::as_str), Some(string));
+            wls.to_json().unwrap();
+        }
+
+        // Decoding keeps the string in an ASCII-only field but warns about
+        // the encoding
+        let data: Vec<u16> = "ABC".encode_utf16().collect();
+        let (flags, rows) = one_string(&FIELD_VOLUME_LABEL, true, data.len(), &data);
+        assert!(decode(flags, &rows, true).is_err());
+        let wls = decode(flags, &rows, false).unwrap();
+        assert_eq!(wls.volume_label().map(String::as_str), Some("ABC"));
+        assert!(
+            wls.warnings()
+                .iter()
+                .any(|w| w.contains("UTF-16 string not allowed"))
+        );
+        wls.to_json().unwrap();
+    }
+
+    // A UTF-16 string of 127 or fewer code units can take more than 127
+    // bytes as UTF-8.
+    #[test]
+    fn test_decode_utf16_over_127_bytes() {
+        // 50 CJK characters take 150 bytes
+        let data = [0x53F7; 50];
+        let (flags, rows) = one_string(&FIELD_USB_PRODUCT, true, data.len(), &data);
+        check_dropped(flags, &rows, "exceeds maximum");
+        let (flags, rows) = one_string(&FIELD_UF2_MODEL, true, data.len(), &data);
+        check_dropped(flags, &rows, "non-ASCII characters in ASCII-only field");
+    }
+
+    // A UTF-16 string can take more than 64 rows.  An ASCII string can't.
+    #[test]
+    fn test_decode_utf16_over_64_rows() {
+        // One non-ASCII character so the string stays within 127 bytes
+        let data: Vec<u16> = format!("é{}", "a".repeat(70)).encode_utf16().collect();
+        let (flags, rows) = one_string(&FIELD_USB_SERIAL_NUMBER, true, data.len(), &data);
+        check_dropped(flags, &rows, "exceeds maximum");
+        let (flags, rows) = one_string(&FIELD_REDIRECT_URL, true, data.len(), &data);
+        check_dropped(flags, &rows, "non-ASCII characters in ASCII-only field");
+    }
+
+    // A setter accepts a string longer than the JSON schema allows and warns
+    // about it.  to_json() returns an error for it.
+    #[test]
+    fn test_to_json_string_too_long() {
+        let mut wls = WhiteLabelStruct::default();
+        wls.set_manufacturer("a".repeat(40)).unwrap();
+        assert!(!wls.is_clean());
+        assert!(matches!(
+            wls.to_json(),
+            Err(Error::InvalidWhiteLabelData(_))
+        ));
     }
 }

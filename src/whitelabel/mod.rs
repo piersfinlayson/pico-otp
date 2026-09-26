@@ -13,6 +13,9 @@ use alloc::format;
 use alloc::string::String;
 use serde::de::Error as _;
 
+// The generator that wrote most of auto implements Default where it could
+// derive it.
+#[allow(clippy::derivable_impls)]
 pub(crate) mod auto;
 use auto::*;
 mod binary;
@@ -65,9 +68,8 @@ pub enum Error {
     OtpDataError(String),
 
     /// Indicates the white label data itself is invalid or inconsistent.  The
-    /// String contains details of the problems found.  This only occurs for
-    /// white label data constructed from an external OTP data source, never
-    /// when generated from JSON.
+    /// String contains details of the problems found.  This never occurs for
+    /// white label data generated from JSON.
     InvalidWhiteLabelData(String),
 
     /// Indicates an internal inconsistency was detected during processing and
@@ -207,7 +209,7 @@ impl WhiteLabelling {
             .as_ref()?
             .manufacturer
             .as_deref()
-            .map(OtpString::from_pre_validated_string)
+            .map(|s| OtpString::from_pre_validated_string(s))
     }
 
     /// Returns the product string, if set.
@@ -216,7 +218,7 @@ impl WhiteLabelling {
             .as_ref()?
             .product
             .as_deref()
-            .map(OtpString::from_pre_validated_string)
+            .map(|s| OtpString::from_pre_validated_string(s))
     }
 
     /// Returns the serial number string, if set.
@@ -225,7 +227,7 @@ impl WhiteLabelling {
             .as_ref()?
             .serial_number
             .as_deref()
-            .map(OtpString::from_pre_validated_string)
+            .map(|s| OtpString::from_pre_validated_string(s))
     }
 
     /// Returns the max power as a u8, if set.
@@ -236,7 +238,7 @@ impl WhiteLabelling {
             .as_ref()
             .and_then(|mp| match mp {
                 WhiteLabellingDeviceMaxPower::String(s) => u8::from_str_radix(&s[2..], 16).ok(),
-                WhiteLabellingDeviceMaxPower::Integer(i) => Some(*i as u8), // Already validated
+                WhiteLabellingDeviceMaxPower::Integer(i) => Some(*i), // Already validated
             })
     }
 
@@ -474,7 +476,7 @@ fn validate_attributes_str(s: &str) -> Result<(), serde_json::Error> {
 }
 
 fn validate_attributes_int(ii: i64) -> Result<(), serde_json::Error> {
-    if ii < 128 || ii > 224 {
+    if !(128..=224).contains(&ii) {
         return Err(serde_json::Error::custom(format!(
             "attributes integer must be 128-224, got: {}",
             ii

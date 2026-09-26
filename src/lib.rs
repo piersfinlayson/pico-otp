@@ -191,24 +191,23 @@ mod tests {
         // We have to handle the set_xxx() call failing if the string is > 127
         // chars - expected when to_string_failure is true
         match match field {
-            "manufacturer" => wls.set_manufacturer(value.to_string()),
-            "product" => wls.set_product(value.to_string()),
-            "serial_number" => wls.set_serial_number(value.to_string()),
-            "volume_label" => wls.set_volume_label(value.to_string()),
-            "scsi_vendor" => wls.set_scsi_vendor(value.to_string()),
-            "scsi_product" => wls.set_scsi_product(value.to_string()),
-            "scsi_version" => wls.set_scsi_version(value.to_string()),
-            "uf2_model" => wls.set_uf2_model(value.to_string()),
-            "uf2_board_id" => wls.set_uf2_board_id(value.to_string()),
-            "redirect_url" => wls.set_redirect_url(value.to_string()),
-            "redirect_name" => wls.set_redirect_name(value.to_string()),
+            "manufacturer" => wls.set_manufacturer(value),
+            "product" => wls.set_product(value),
+            "serial_number" => wls.set_serial_number(value),
+            "volume_label" => wls.set_volume_label(value),
+            "scsi_vendor" => wls.set_scsi_vendor(value),
+            "scsi_product" => wls.set_scsi_product(value),
+            "scsi_version" => wls.set_scsi_version(value),
+            "uf2_model" => wls.set_uf2_model(value),
+            "uf2_board_id" => wls.set_uf2_board_id(value),
+            "redirect_url" => wls.set_redirect_url(value),
+            "redirect_name" => wls.set_redirect_name(value),
             _ => panic!("Unknown field"),
         } {
             Ok(_) => {
                 if to_string_failure {
                     panic!("Expected failure setting field '{field}' with value '{value}'");
                 }
-                ()
             }
             Err(e) => {
                 if to_string_failure {
@@ -264,7 +263,7 @@ mod tests {
         // A string longer than 127 will be rejected on creation, so we have
         // to handle it differently
         let too_long = max_len + 1;
-        let to_string_failure = if too_long > 127 { true } else { false };
+        let to_string_failure = too_long > 127;
         let res = test_string(field, false, to_string_failure, &"a".repeat(too_long));
         assert!(res.is_ok());
     }
@@ -325,7 +324,7 @@ mod tests {
     }
 
     fn test_full_cycle_string(json: &str) {
-        let wls = WhiteLabelStruct::from_json(&json).unwrap();
+        let wls = WhiteLabelStruct::from_json(json).unwrap();
         assert!(wls.is_clean());
         let od = OtpData::try_from(wls);
         assert!(od.is_ok());

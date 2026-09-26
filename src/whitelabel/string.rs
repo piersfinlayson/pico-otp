@@ -25,9 +25,9 @@ pub(crate) struct OtpString {
     string: String,
 }
 
-impl ToString for OtpString {
-    fn to_string(&self) -> String {
-        self.string.clone()
+impl core::fmt::Display for OtpString {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(&self.string)
     }
 }
 
@@ -77,8 +77,8 @@ impl OtpString {
         &self.string
     }
 
-    pub(crate) fn from_pre_validated_string(string: &String) -> Self {
-        Self::try_from(string.as_str()).expect("internal error - string validation failed")
+    pub(crate) fn from_pre_validated_string(string: &str) -> Self {
+        Self::try_from(string).expect("internal error - string validation failed")
     }
 
     /// Returns the string encoded as a `Vec<u16>` suitable for writing to OTP.
@@ -132,7 +132,7 @@ impl OtpString {
 
         // Update data_offset to point to the next free row after this string
         *offset = old_offset
-            .checked_add(self.otp_row_count() as u8)
+            .checked_add(self.otp_row_count())
             .expect("internal error - offset overflow");
 
         low_byte | high_byte
@@ -216,11 +216,13 @@ impl OtpString {
     /// Returns `Ok(None)` if the boot flag bit is clear (indicating no string
     /// is present).
     ///
-    /// Returns `Err` for hard errors that prevent parsing - primarily if the
-    /// field name is invalid, or if the field does not support strings.
+    /// Returns `Err(Error::InternalInconsistency)` if the extracted string's
+    /// character count doesn't match the STRDEF.  Passing a non-string field
+    /// is a bug in the caller and panics.
     ///
     /// Adds warnings for unusual and suspicious but at least partially
-    /// parseable conditions.
+    /// parseable conditions.  Where the string can't be decoded or isn't valid
+    /// for the field, it adds a warning and returns `Ok(None)`.
     pub(crate) fn from_otp_data(
         rows: &[u16],
         usb_boot_flags: u16,
@@ -354,7 +356,27 @@ impl OtpString {
             }
         };
 
-        // Check length
+        // An ASCII STRDEF holds one byte per character so a byte above 0x7F
+        // is invalid even where the bytes form valid UTF-8.
+        if !is_utf16 && !string.is_ascii() {
+            warnings.push(format!(
+                "{}: non-ASCII data in ASCII string at offset {}",
+                field_name, offset
+            ));
+            return Ok(None);
+        }
+
+        // Drop a UTF-16 string in an ASCII-only field unless its characters
+        // are all ASCII.
+        if !utf16_allowed && !string.is_ascii() {
+            warnings.push(format!(
+                "{}: non-ASCII characters in ASCII-only field",
+                field_name
+            ));
+            return Ok(None);
+        }
+
+        // Check length.  Drop a string longer than the JSON schema allows.
         if string.chars().count() > max_string_len {
             warnings.push(format!(
                 "{}: extracted string length {} exceeds maximum of {}",
@@ -362,22 +384,20 @@ impl OtpString {
                 string.chars().count(),
                 max_string_len
             ));
+            return Ok(None);
         }
 
-        let otp_string = OtpString::new(string);
+        let otp_string = OtpString::try_from(string)?;
 
-        // Sanity check: validate the extracted string matches the STRDEF
-        // These are asserts because if they fail, our parsing logic is wrong.
-        assert_eq!(
-            otp_string.char_count() as usize,
-            char_count,
-            "Extracted string character count does not match STRDEF"
-        );
-        assert_eq!(
-            otp_string.is_utf16(),
-            is_utf16,
-            "Extracted string encoding does not match STRDEF"
-        );
+        // Sanity check the extracted string against the STRDEF.  A UTF-16
+        // string of only ASCII characters becomes an ASCII OtpString so the
+        // encodings can differ but the character counts can't.
+        if otp_string.char_count() as usize != char_count {
+            return Err(Error::InternalInconsistency(format!(
+                "{}: extracted string character count does not match STRDEF",
+                field_name
+            )));
+        }
 
         Ok(Some(otp_string))
     }
@@ -392,8 +412,8 @@ mod tests {
     fn test_string_to_otp_string() {
         let s = OtpString::try_from("hello").unwrap();
         assert_eq!(s.char_count(), 5);
-        assert_eq!(s.is_ascii(), true);
-        assert_eq!(s.is_utf16(), false);
+        assert!(s.is_ascii());
+        assert!(!s.is_utf16());
         assert_eq!(s.otp_row_count(), 3);
         let otp_rows = s.to_otp_rows();
         assert_eq!(otp_rows, vec![0x6568, 0x6c6c, 0x006f]); // 'H' 'e', 'l' 'l', 'o' 0
@@ -410,8 +430,8 @@ mod tests {
     fn test_utf16_string_to_otp_string() {
         let s = OtpString::try_from("héllo").unwrap(); // 'é' is non
         assert_eq!(s.char_count(), 5);
-        assert_eq!(s.is_ascii(), false);
-        assert_eq!(s.is_utf16(), true);
+        assert!(!s.is_ascii());
+        assert!(s.is_utf16());
         assert_eq!(s.otp_row_count(), 5);
         let otp_rows = s.to_otp_rows();
         assert_eq!(otp_rows, vec![0x0068, 0x00e9, 0x006c, 0x006c, 0x006f]);
