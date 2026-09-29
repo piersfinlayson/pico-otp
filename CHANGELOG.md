@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.2.1] - ????/??/??
+## [0.2.1] - 2026-09-29
 
 - Fixed JSON handling:
     - Default USB attributes to 0x80 if power but attributes not provided.
